@@ -14,6 +14,7 @@ setup(
         'icalendar==4.0.1',
         'humanize==3.12.0',
         'pytest==6.2.5',
-        'tzlocal==2.1'
+        'tzlocal==2.1',
+        'ecdsa==0.16.1'
         ]
     )
