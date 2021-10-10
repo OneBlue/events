@@ -1,0 +1,11 @@
+image: debian:buster
+
+pipelines:
+  default:
+    - step:
+        script:
+          - apt-get update
+          - apt-get install -y python3-pip
+          - pip install . # Test package installation
+          - pytest events
+
