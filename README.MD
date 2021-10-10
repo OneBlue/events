@@ -23,6 +23,13 @@ Run via:
 events /path/to/config.py
 ```
 
+For production, use waitress:
+
+```
+$ export EVENTS_CONFIG_PATH='/path/to/config.py'
+$ waitress-serve --call 'events:create_app'
+```
+
 ## Testing
 
 Run the unit tests via:
