@@ -32,6 +32,16 @@ event_3.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
 event_3['summary'] = 'event_3'
 event_3.add('created', datetime(2012, 10, 10, 10, 0, 0))
 event_3['uid'] = 'event_3'
+event_3.add('attendee', 'MailTo:foo@bar.com')
+
+event_4 = Event()
+event_4.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
+event_4['summary'] = 'event_4'
+event_4.add('created', datetime(2012, 10, 10, 10, 0, 0))
+event_4['uid'] = 'event_4'
+event_4.add('attendee', 'MailTo:foo@bar.com')
+event_4.add('attendee', 'MailTo:foo2@bar.com')
+
 
 
 save_event_override = None
@@ -44,6 +54,8 @@ class TestCollection:
             event = event_2
         elif name == 'event_3.ics':
             event = event_3
+        elif name == 'event_4.ics':
+            event = event_4
 
         if not event:
             raise NotFoundException(f'Event {name} not found')
@@ -71,6 +83,7 @@ class Config:
     smtp_port = 1112
     secret_key = os.urandom(32)
     recent_count = 20
+
     external_url = 'http://127.0.0.1:1111'
     signing_key = SigningKey.generate()
 
@@ -265,6 +278,84 @@ def test_subscribe_with_csrf_and_token(client):
 
     token = generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1))
     response = client.post(f'/1/event_1.ics/subscribe', data={'email': 'foo@bar.com', 'csrf_token': client.csrf_token, 't': token, 'updates': 'on'})
+
+    assert response.status_code == 200
+    assert called
+    assert save_called
+
+def test_subscribe_with_csrf_and_token_duplicate(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo@bar.com']
+        assert 'Subject: Event_3' in content
+        called = True
+
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
+
+    override_send_email(send_email)
+
+    token = generate_token(settings, '/1/event_3.ics', expires=datetime.now() + timedelta(days=1))
+    response = client.post(f'/1/event_3.ics/subscribe', data={'email': 'foo@bar.com', 'csrf_token': client.csrf_token, 't': token, 'updates': 'on'})
+
+    assert response.status_code == 200
+    assert called
+
+def test_subscribe_with_csrf_and_token_duplicate_list(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo@bar.com']
+        assert 'Subject: Event_4' in content
+        called = True
+
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
+
+    override_send_email(send_email)
+
+    token = generate_token(settings, '/1/event_4.ics', expires=datetime.now() + timedelta(days=1))
+    response = client.post(f'/1/event_4.ics/subscribe', data={'email': 'foo@bar.com', 'csrf_token': client.csrf_token, 't': token, 'updates': 'on'})
+
+    assert response.status_code == 200
+    assert called
+
+def test_subscribe_with_csrf_and_token_list_new(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo3@bar.com']
+        assert 'Subject: Event_4' in content
+        called = True
+
+    save_called = False
+    def save_event(name: str, event):
+        nonlocal save_called
+
+        assert name == 'event_4.ics'
+        assert [e.title() for e in event.subcomponents[0]['attendee']] == ['Mailto:Foo@Bar.Com','Mailto:Foo2@Bar.Com', 'Mailto:Foo3@Bar.Com']
+        save_called = True
+
+    save_event_override = save_event
+
+    override_send_email(send_email)
+
+    token = generate_token(settings, '/1/event_4.ics', expires=datetime.now() + timedelta(days=1))
+    response = client.post(f'/1/event_4.ics/subscribe', data={'email': 'foo3@bar.com', 'csrf_token': client.csrf_token, 't': token, 'updates': 'on'})
 
     assert response.status_code == 200
     assert called

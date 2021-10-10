@@ -21,8 +21,10 @@ def subscribe_to_event(event, event_name, collection, email):
     component = next(e for e in event.subcomponents if 'summary' in e)
     attendees = component.get('attendee')
 
-    if attendees and any(e.title().lower() == 'mailto:' + email.lower() for e in attendees):
-        raise AlreadySubscribed(f'{email} is already subscribed to this event')
+    if attendees:
+        expected_field = 'mailto:' + email.lower()
+        if (isinstance(attendees, icalendar.vCalAddress) and attendees.title().lower() == expected_field) or any(e.title().lower() == expected_field for e in attendees):
+            raise AlreadySubscribed(f'{email} is already subscribed to this event')
 
     logging.info(f'Adding {email} to event {event_name}')
     attendee = icalendar.vCalAddress('MAILTO:' + email)
@@ -57,7 +59,7 @@ def send_event_email(event, destination, settings):
     cal_content.add_header('Content-Description', 'invite.ics')
     cal_content.add_header('Filename', 'invite.ics')
     cal_content.add_header('Path', 'invite.ics')
-    
+
     content.attach(cal_content)
 
     if send_email_override:
