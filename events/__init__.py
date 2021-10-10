@@ -243,14 +243,17 @@ def load_settings(path: str):
     spec = importlib.util.spec_from_file_location('settings', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    logging.info(f'Loaded settings from {sys.argv[1]}')
 
     return module
 
 def create_app(config=None):
     if not config:
-        config = os.environ.get('EVENTS_CONFIG_PATH', None)
-        if not config:
+        path = os.environ.get('EVENTS_CONFIG_PATH', None)
+        if not path:
             raise RuntimeError('No config passed. Used either argv[1] or $EVENTS_CONFIG_PATH')
+
+        config = load_settings(path)
 
     global settings
     settings = config
@@ -267,7 +270,6 @@ def main():
         sys.exit(1)
 
     settings = load_settings(sys.argv[1])
-    logging.info(f'Loaded settings from {sys.argv[1]}')
     app = create_app(settings)
     app.run(host=settings.host, port=settings.port)
 
