@@ -106,7 +106,8 @@ class FlaskClient(BaseFlaskClient):
         with app.app_context():
             with current_app.test_request_context("/login", environ_overrides=environ_overrides):
                 csrf_token = generate_csrf()
-                current_app.save_session(session, request)
+                current_app.session_cookie_name = 'dummy'
+                current_app.session_interface.save_session(current_app, session, request)
                 return csrf_token
 
 
