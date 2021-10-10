@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+   <style>
+      table, th, td {
+      border:1px solid black;
+      }
+   </style>
+   <body>
+      <h2>Calendar entry</h2>
+      <table style="width:100%">
+         <tr>
+            <th colspan="2"> {{ title }} </th>
+         </tr>
+{% if start is defined %}
+         <tr>
+           <th style="background-color:#808080"> Start </th>
+           <td>{{ start }} </td>
+         </tr>
+{% endif %}
+{% if end is defined %}
+         <tr>
+            <th style="background-color:#808080"> End </th>
+            <td>{{ end }}</td>
+         </tr>
+{% endif %}
+{% if location is defined %}
+         <tr>
+            <th style="background-color:#808080"> Location </th>
+            <td>{{ location }}</td>
+         </tr>
+{% endif %}
+{% if description is defined %}
+         <tr>
+            <th style="background-color:#808080"> Description </th>
+            <td>{{ description }}</td>
+         </tr>
+{% endif %}
+{% if attendees is defined %}
+         <tr>
+            <th style="background-color:#808080"> Attendees </th>
+            <td>{{ attendees }}</td>
+         </tr>
+{% endif %}
+
+      </table>
+      <form action="/{{ collection }}/{{ event }}/subscribe" method="post" style="display: inline;">
+         <input type="email" id="email" name="email" required="required" placeholder="email address">
+         <input type="checkbox" id="updates" name="updates" checked>
+         <label for="updates">Receive future updates</label>
+         <input type="submit" value="Add to my calendar">
+         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+{% if token is defined %}
+         <input type="hidden" name="t" value="{{ token }}"/>
+{% endif %}
+      </form>
+{% if notification is defined %}
+  <b style="color:green">{{ notification }}<b/> <br/>
+{% endif %}
+  <a href="/{{ collection }}/{{ event }}/ics{% if token is defined %}?t={{token}}{% endif %}">
+      <button>Download ICS</button>
+      </a>
+   </body>
+
+{% if admin_links is defined %}
+<ul>
+<h2>Admin</h2>
+{% for e in admin_links %}
+  <li><a href="{{ e.url }}">{{ e.title }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+</html>
+
+

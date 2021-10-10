@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+   <style>
+      table, th, td {
+      border:1px solid black;
+      }
+   </style>
+   <body>
+      <h2>Recent events</h2>
+      <a href="{{ button.url }}">
+      <button>{{ button.text }}</button>
+      </a>
+
+{% for list in lists%}
+      <table style="width:100%">
+         <tr>
+           <th colspan="2"> {{ list.title }} </th>
+         </tr>
+{% for e in list.entries %}
+         <tr>
+           <th style="background-color:#808080"> {{ e.ts }} </th>
+           <td> <a href="/{{ e.collection }}/{{ e.filename }}"> {{ e.title }} </a></td>
+         </tr>
+{% endfor %}
+{% endfor %}
+   </body>
+</html>
+
+

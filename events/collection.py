@@ -1,0 +1,102 @@
+import icalendar
+import requests
+import logging
+from .errors import *
+from xml.etree import ElementTree
+from xml.sax.saxutils import escape
+
+class Collection:
+    def __init__(self, url: str, auth, show_private=False):
+        self.url = url
+        self.auth = auth
+        self.show_private = show_private
+
+    def is_event_visible(self, event) -> bool:
+        if event.name == 'VTODO':
+            return False
+
+        if not self.show_private and 'CLASS' in event and event['class'].title().upper() != 'PUBLIC':
+            return False
+
+        for e in event.subcomponents:
+            if e.name == 'VTODO':
+                return False # VTODO: skipping
+
+            if not self.show_private and 'CLASS' in e and e['class'].title().upper() != 'PUBLIC':
+                return False
+
+        return True
+
+    def get_event(self, name: str):
+        if '/' in name or '<' in name or '>' in name or '"' in name or "'" in name:
+            raise SuspiciousRequest('Suspicous event name: ' + name)
+
+        response = requests.get(self.url + name, auth=self.auth)
+        if response.status_code == 404:
+            # Unfortunately the uid doesn't always match the filename.
+            # In that case we need to lookup the filename for the UID
+            # And issue a redirect to the correct page
+
+            if name.endswith('.ics'):
+                name = name[:-4]
+            raise EventRedirect(self.lookup_event_by_uid(name))
+
+        response.raise_for_status()
+
+        event = icalendar.Calendar.from_ical(response.text)
+        if not self.is_event_visible(event):
+            logging.info(f'Attempt to access private event: {name}')
+            raise SuspiciousRequest(f'Attempt to access private event: {name}')
+
+        return event
+
+    def lookup_event_by_uid(self, uid: str):
+        session = requests.Session()
+        session.auth = self.auth
+
+        query = f'''
+        <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+            <D:prop>
+              <D:getetag/>
+            </D:prop>
+            <C:filter>
+              <C:comp-filter name="VCALENDAR">
+                <C:comp-filter name="VEVENT">
+                  <C:prop-filter name="UID">
+                    <C:text-match>{escape(uid)}</C:text-match>
+                  </C:prop-filter>
+                </C:comp-filter>
+              </C:comp-filter>
+            </C:filter>
+            </C:calendar-query>'''
+
+        response = session.request(url=self.url, method='REPORT', data=query)
+        response.raise_for_status()
+
+        tree = ElementTree.fromstring(response.text)
+
+        entries = tree.findall('./{DAV:}response/{DAV:}href')
+        logging.info(f'UID lookup for {uid} returned {len(entries)} entries')
+
+        if len(entries) != 1:
+            raise NotFoundException(f'Unique event with UID {uid} not found ({len(entries)} matches)')
+
+        # The url might contain the collection name, but all that we want is the file name
+        return entries[0].text.split('/')[-1]
+
+    def save_event(self, name: str, event):
+        logging.info(f'Saving event {name} in backend')
+
+        if '/' in name:
+            raise SuspiciousRequest('Suspicous event name: ' + name)
+
+        response = requests.put(self.url + name, auth=self.auth, data=event.to_ical())
+        response.raise_for_status()
+
+    def all_events(self):
+        response = requests.get(self.url, auth=self.auth)
+        response.raise_for_status()
+
+        return [e for e in icalendar.Calendar.from_ical(response.text).subcomponents if e.has_key('summary') and self.is_event_visible(e)]
+
+
