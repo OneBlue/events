@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 import sys
+import os
 import logging
 import traceback
 import itertools
@@ -246,7 +247,12 @@ def load_settings(path: str):
 
     return module
 
-def create_app(config):
+def create_app(config=None):
+    if not config:
+        config = os.environ.get('EVENTS_CONFIG_PATH', None)
+        if not config:
+            raise RuntimeError('No config passed. Used either argv[1] or $EVENTS_CONFIG_PATH')
+
     global settings
     settings = config
 

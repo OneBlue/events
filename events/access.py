@@ -19,7 +19,6 @@ def validate_token(settings, token: str, url: str):
     except Exception as e:
         raise InvalidToken() from e 
 
-
     logging.debug(f'Decoded token ts: {ts}')
 
     # Validate signature
