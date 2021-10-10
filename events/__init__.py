@@ -243,7 +243,7 @@ def load_settings(path: str):
     spec = importlib.util.spec_from_file_location('settings', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    logging.info(f'Loaded settings from {sys.argv[1]}')
+    logging.info(f'Loaded settings from {path}')
 
     return module
 
