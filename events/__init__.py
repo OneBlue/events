@@ -9,7 +9,6 @@ import importlib.util
 from humanize import naturaldelta
 from icalendar import vCalAddress
 from flask import Flask, request, render_template, Response
-from flask_restful import Resource, Api
 from .errors import *
 from .subscribe import send_event_email, subscribe_to_event
 from datetime import datetime, date, timedelta
