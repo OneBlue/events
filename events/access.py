@@ -8,7 +8,6 @@ from ecdsa.keys import BadSignatureError
 
 def decode_token(token: str) -> (int, str):
     blob = base64.decodebytes(token.encode())
-    
     ts = struct.unpack("<Q", blob[:8])[0]
 
     return ts, blob[8:]
@@ -48,4 +47,4 @@ def generate_token(settings, url: str, expires: datetime) -> str:
     return base64.b64encode(bytes).decode()
 
 def generate_access_url(settings, request, expires: datetime) -> str:
-    return request.base_url + '?t=' + quote_plus(generate_token(settings, request.path, expires))
+    return settings.external_url + request.path + '?t=' + quote_plus(generate_token(settings, request.path, expires))
