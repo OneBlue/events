@@ -32,15 +32,15 @@ event_3.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
 event_3['summary'] = 'event_3'
 event_3.add('created', datetime(2012, 10, 10, 10, 0, 0))
 event_3['uid'] = 'event_3'
-event_3.add('attendee', 'MailTo:foo@bar.com')
+event_3.add('attendee', 'MAILTO:foo@bar.com')
 
 event_4 = Event()
 event_4.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
 event_4['summary'] = 'event_4'
 event_4.add('created', datetime(2012, 10, 10, 10, 0, 0))
 event_4['uid'] = 'event_4'
-event_4.add('attendee', 'MailTo:foo@bar.com')
-event_4.add('attendee', 'MailTo:foo2@bar.com')
+event_4.add('attendee', 'MAILTO:foo@bar.com')
+event_4.add('attendee', 'MAILTO:foo2@bar.com')
 
 
 
@@ -261,7 +261,7 @@ def test_subscribe_with_csrf_and_token(client):
         nonlocal called
         assert source == settings.email_from
         assert destination == ['foo@bar.com']
-        assert 'Subject: Event_1' in content
+        assert 'Subject: event_1' in content
         called = True
 
     save_called = False
@@ -291,7 +291,7 @@ def test_subscribe_with_csrf_and_token_duplicate(client):
         nonlocal called
         assert source == settings.email_from
         assert destination == ['foo@bar.com']
-        assert 'Subject: Event_3' in content
+        assert 'Subject: event_3' in content
         called = True
 
     def save_event(name: str, event):
@@ -315,7 +315,7 @@ def test_subscribe_with_csrf_and_token_duplicate_list(client):
         nonlocal called
         assert source == settings.email_from
         assert destination == ['foo@bar.com']
-        assert 'Subject: Event_4' in content
+        assert 'Subject: event_4' in content
         called = True
 
     def save_event(name: str, event):
@@ -339,7 +339,7 @@ def test_subscribe_with_csrf_and_token_list_new(client):
         nonlocal called
         assert source == settings.email_from
         assert destination == ['foo3@bar.com']
-        assert 'Subject: Event_4' in content
+        assert 'Subject: event_4' in content
         called = True
 
     save_called = False
@@ -347,7 +347,7 @@ def test_subscribe_with_csrf_and_token_list_new(client):
         nonlocal save_called
 
         assert name == 'event_4.ics'
-        assert [e.title() for e in event.subcomponents[0]['attendee']] == ['Mailto:Foo@Bar.Com','Mailto:Foo2@Bar.Com', 'Mailto:Foo3@Bar.Com']
+        assert [str(e) for e in event.subcomponents[0]['attendee']] == ['MAILTO:foo@bar.com','MAILTO:foo2@bar.com', 'MAILTO:foo3@bar.com']
         save_called = True
 
     save_event_override = save_event

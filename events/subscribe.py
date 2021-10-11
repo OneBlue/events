@@ -46,11 +46,11 @@ def send_event_email(event, destination, settings):
     content = MIMEMultipart('alternative')
     content['Reply-To'] = settings.email_from
     content['Date'] = formatdate(localtime=True)
-    content['Subject'] = component['summary'].title()
+    content['Subject'] = str(component['summary'])
     content['From'] = settings.email_from
     content['To'] = destination
     content["Content-class"] = "urn:content-classes:calendarmessage"
-    content.attach(MIMEText('Calendar invite for event: ' + component['summary'].title()))
+    content.attach(MIMEText('Calendar invite for event: ' + str(component['summary'])))
 
     cal_content = MIMEBase('text', "calendar", method="REQUEST", name='invite.ics')
     cal_content.set_payload(cal.to_ical())

@@ -17,6 +17,7 @@ from flask import request, redirect
 from flask_wtf.csrf import CSRFProtect
 from .access import validate_token, generate_access_url
 from urllib.parse import quote_plus
+from dateutil.rrule import rrulestr
 
 settings = None
 app = Flask(__name__)
@@ -43,7 +44,6 @@ def rationalize_time(ts) -> datetime:
         return get_localzone().localize(datetime.combine(ts, datetime.min.time()))
     else:
         return ts.astimezone(get_localzone())
-
 
 def format_time(ts) -> str:
         return rationalize_time(ts).strftime(settings.time_format)
@@ -82,7 +82,7 @@ def validate_access_impl(token: str):
 def get_event_fields(event):
     component = next(e for e in event.subcomponents if 'summary' in e)
 
-    event = {'title': component['summary'].title()}
+    event = {'title': str(component['summary'])}
 
     if 'dtstart' in component:
         event['start'] = format_time(component['dtstart'].dt)
@@ -91,17 +91,17 @@ def get_event_fields(event):
         event['end'] = format_time(component['dtend'].dt)
 
     if 'description' in component :
-        event['description'] = component['description'].title()
+        event['description'] = str(component['description'])
 
     if 'location' in component:
-        event['location'] = component['location'].title()
+        event['location'] = str(component['location'])
 
     attendees = component.get('attendee')
     if attendees:
         if isinstance(attendees, vCalAddress):
-            event['attendees'] = attendees.title().lower().replace('mailto:', '')
+            event['attendees'] = attendees.lower().replace('mailto:', '')
         else:
-            event['attendees'] = ', '.join([e.title().lower().replace('mailto:', '') for e in attendees])
+            event['attendees'] = ', '.join([e.lower().replace('mailto:', '') for e in attendees])
 
     return event
 
@@ -196,24 +196,54 @@ def event_ics(collection, event):
 
     return response
 
-def make_event_list(events: list, sort_field: str, title: str, max_count: int, allow_nulls=False):
+def make_event_list(events: list, sort_field: str, title: str, max_count: int, allow_nulls=False, reverse=True):
     sortable_events = (e for e in events if sort_field in e[0])
 
-    entries = reversed(sorted(sortable_events, key=lambda event: event[0][sort_field].dt))
+    now = rationalize_time(datetime.now())
+    if sort_field != 'DTSTART':
+        events_with_date = [(e[0], e[1], rationalize_time(e[0][sort_field].dt)) for e in sortable_events]
+    else:
+        # Special treatement for reccurence rules
+        def next_occurence(event):
+            if 'rrule' in event:
+                try:
+                    rule = rrulestr(event['rrule'].to_ical().decode(), dtstart=rationalize_time(event['dtstart'].dt))
+                except:
+                    import pdb
+                    pdb.post_mortem()
+                return rule.after(now) or rule.before(now) or event['dtstart'].dt
+            else:
+                return rationalize_time(event['dtstart'].dt)
 
-    if allow_nulls: # Add non-sortable entries if requested
-        entries = itertools.chain(entries, (e for e in events if sort_field not in e[0]))
+        # Compute next occurence
+        events_with_date = [(e[0], e[1], rationalize_time(e[0][sort_field].dt)) for e in sortable_events]
+
+        # Drop past events
+        events_with_date = [e for e in events_with_date if e[2] >= now]
+
+    entries = sorted(events_with_date, key=lambda event: event[2])
+    if reverse:
+        entries = reversed(entries)
+
+    if sort_field and allow_nulls: # Add non-sortable entries if requested
+        entries = itertools.chain(entries, ((e[0], e[1], None) for e in events if sort_field not in e[0]))
 
     if max_count: # Slice if requested
         entries = itertools.islice(entries, 0, max_count)
 
-    now = datetime.now(get_localzone())
-    def make_event(event, collection):
+    def make_event(event, collection, ts):
+        delta = '[NULL]'
+        if ts:
+            if ts > now:
+                delta =  'in ' + naturaldelta(now - ts)
+            else:
+                delta =  naturaldelta(now - ts) + ' ago'
+
         return {
-                'ts': naturaldelta(now - event[sort_field].dt) + ' ago' if sort_field in event else '[Null]',
+                'ts': delta,
                 'collection': collection,
-                'filename': event['uid'].title(),
-                'title': event['summary'].title()
+                'filename': str(event['uid']),
+                'title': str(event['summary'])
                 }
 
     return {'title': title, 'entries': [make_event(*e) for e in entries]}
@@ -233,8 +263,9 @@ def home():
     else:
         views = [
                  make_event_list(all_events, 'LAST-MODIFIED', 'Edited recently', settings.recent_count),
-                 make_event_list(all_events, 'CREATED', 'Created recently', settings.recent_count)
-                 ]
+                 make_event_list(all_events, 'CREATED', 'Created recently', settings.recent_count),
+                 make_event_list(all_events, 'DTSTART', 'Upcoming', settings.recent_count, reverse=False),
+                ]
         button = {'text': 'Show all events', 'url': '/?all=true'}
 
     return render_template('list.jinja', lists=views, button=button)
