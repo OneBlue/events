@@ -10,8 +10,14 @@ from ecdsa.keys import BadSignatureError
 def decode_token(token: str) -> (int, str):
     try:
         blob = base64.decodebytes(token.encode())
-    except binascii.Error: # Some browsers will double escape the token.
+        if len(blob) != 56:
+            raise RuntimeError(f'Unexpected blob length: {len(blob)})')
+
+    except: # Some browsers will double escape the token.
         blob = base64.decodebytes(unquote_plus(token).encode())
+        if len(blob) != 56:
+            raise RuntimeError(f'Unexpected blob length: {len(blob)})')
+
 
     ts = struct.unpack("<Q", blob[:8])[0]
 
