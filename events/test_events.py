@@ -283,6 +283,37 @@ def test_subscribe_with_csrf_and_token(client):
     assert called
     assert save_called
 
+def test_subscribe_with_csrf_and_double_quoted_token(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['double@bar.com']
+        assert 'Subject: event_2' in content
+        called = True
+
+    save_called = False
+    def save_event(name: str, event):
+        nonlocal save_called
+
+        assert name == 'event_2.ics'
+        assert event.subcomponents[0]['attendee'].title() == 'Mailto:Double@Bar.Com'
+        save_called = True
+
+    save_event_override = save_event
+
+    override_send_email(send_email)
+
+    token = generate_token(settings, '/1/event_2.ics', expires=datetime.now() + timedelta(days=1))
+    response = client.post(f'/1/event_2.ics/subscribe', data={'email': 'double@bar.com', 'csrf_token': client.csrf_token, 'updates': 'on', 't': quote_plus(token)})
+
+    assert response.status_code == 200
+    assert called
+    assert save_called
+
+
 def test_subscribe_with_csrf_and_token_duplicate(client):
     global save_event_override
 

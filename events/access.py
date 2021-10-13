@@ -1,13 +1,18 @@
 import base64
 import struct
 import logging
+import binascii
 from datetime import datetime
 from .errors import *
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, unquote_plus
 from ecdsa.keys import BadSignatureError
 
 def decode_token(token: str) -> (int, str):
-    blob = base64.decodebytes(token.encode())
+    try:
+        blob = base64.decodebytes(token.encode())
+    except binascii.Error: # Some browsers will double escape the token.
+        blob = base64.decodebytes(unquote_plus(token).encode())
+
     ts = struct.unpack("<Q", blob[:8])[0]
 
     return ts, blob[8:]
@@ -16,7 +21,7 @@ def validate_token(settings, token: str, url: str):
     try:
         ts, sig = decode_token(token)
     except Exception as e:
-        raise InvalidToken() from e 
+        raise InvalidToken() from e
 
     logging.debug(f'Decoded token ts: {ts}')
 
