@@ -17,6 +17,10 @@ class AlreadySubscribed(HTTPException):
     def __init__(self, message: str):
         super().__init__(200, message)
 
+class InvalidEmailAddress(HTTPException):
+    def __init__(self, address: str):
+        super().__init__(400, f'Invalid email address: {address}')
+
 class AdminRequired(HTTPException):
     def __init__(self):
         super().__init__(404, 'Admin required') # Returning 404 by design to hide admin content

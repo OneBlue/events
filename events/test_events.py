@@ -1,13 +1,14 @@
 import logging
 import os
 import pytest
+import json
 from threading import Thread
 from ecdsa import SigningKey
 from .access import *
 from datetime import datetime, timedelta
 from .errors import *
 from . import create_app
-from .subscribe import override_send_email
+from .subscribe import override_send_email, send_event_email, subscribe_to_event
 from icalendar import Calendar, Event
 from urllib.parse import quote_plus
 from flask_wtf.csrf import generate_csrf
@@ -42,7 +43,11 @@ event_4['uid'] = 'event_4'
 event_4.add('attendee', 'MAILTO:foo@bar.com')
 event_4.add('attendee', 'MAILTO:foo2@bar.com')
 
-
+event_5 = Event()
+event_5.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
+event_5['summary'] = 'event_5'
+event_5.add('created', datetime(2012, 10, 10, 10, 0, 0))
+event_5['uid'] = 'event_5from email.utils import parseaddr'
 
 save_event_override = None
 
@@ -56,6 +61,8 @@ class TestCollection:
             event = event_3
         elif name == 'event_4.ics':
             event = event_4
+        elif name == 'event_5.ics':
+            event = event_5
 
         if not event:
             raise NotFoundException(f'Event {name} not found')
@@ -252,7 +259,6 @@ def test_subscribe_with_csrf_and_token(client):
     assert response.status_code == 200
     assert called
 
-
 def test_subscribe_with_csrf_and_token(client):
     global save_event_override
 
@@ -282,6 +288,48 @@ def test_subscribe_with_csrf_and_token(client):
     assert response.status_code == 200
     assert called
     assert save_called
+
+def test_subscribe_bad_email_no_updates(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        assert False
+
+    save_called = False
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
+
+    override_send_email(send_email)
+
+    token = generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1))
+    response = client.post(f'/1/event_1.ics/subscribe', data={'email': 'foo', 'csrf_token': client.csrf_token, 't': token, 'updates': 'off'})
+
+    assert response.status_code == 200
+    assert 'Invalid email: foo' in response.data.decode()
+
+def test_subscribe_bad_email_with_updates(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        assert False
+
+    save_called = False
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
+
+    override_send_email(send_email)
+
+    token = generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1))
+    response = client.post(f'/1/event_1.ics/subscribe', data={'email': 'foo', 'csrf_token': client.csrf_token, 't': token, 'updates': 'on'})
+
+    assert response.status_code == 200
+    assert 'Invalid email: foo' in response.data.decode()
 
 def test_subscribe_with_csrf_and_double_quoted_token(client):
     global save_event_override
@@ -391,3 +439,99 @@ def test_subscribe_with_csrf_and_token_list_new(client):
     assert response.status_code == 200
     assert called
     assert save_called
+
+def test_subscribe_api_non_admin(client):
+    response = client.post(f'api/1/event_4.ics/subscribe', data=json.dumps({'email': 'foo3@bar.com', 'updates': 'on'}), content_type='application/json')
+
+    assert response.status_code == 404
+
+def test_subscribe_api_admin_no_email(client):
+    response = client.post(f'api/1/event_4.ics/subscribe', data=json.dumps({'updates': 'on'}), headers={'X-Admin': 'true'}, content_type='application/json')
+
+    assert response.status_code == 400
+
+def test_subscribe_api_admin_no_json(client):
+    response = client.post(f'api/1/event_4.ics/subscribe', data='koi', content_type='application/json', headers={'X-Admin': 'true'})
+
+    assert response.status_code == 400
+
+def test_subscribe_api_admin(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo5@bar.com']
+        assert 'Subject: event_5' in content
+        called = True
+
+    save_called = False
+    def save_event(name: str, event):
+        nonlocal save_called
+
+        assert name == 'event_5.ics'
+
+        assert event.subcomponents[0]['attendee'].title() == 'Mailto:Foo5@Bar.Com'
+        save_called = True
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'api/1/event_5.ics/subscribe', data=json.dumps({'updates': True, 'email': 'foo5@bar.com'}), headers={'X-Admin': 'true'}, content_type='application/json')
+    assert response.status_code == 200
+    assert called
+    assert save_called
+
+def test_subscribe_api_admin_no_updates(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo5@bar.com']
+        assert 'Subject: event_5' in content
+        called = True
+
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'api/1/event_5.ics/subscribe', data=json.dumps({'updates': False, 'email': 'foo5@bar.com'}), headers={'X-Admin': 'true'}, content_type='application/json')
+    assert response.status_code == 200
+    assert called
+
+def test_subscribe_api_admin_no_bad_email_no_updates(client):
+    global save_event_override
+
+    def send_email(source: str, destination: list, content: str):
+        assert False
+
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'api/1/event_5.ics/subscribe', data=json.dumps({'updates': False, 'email': 'koi'}), headers={'X-Admin': 'true'}, content_type='application/json')
+    assert response.status_code == 400
+    assert response.data == b'Invalid email address: koi'
+
+def test_subscribe_api_admin_no_bad_email_updates(client):
+    global save_event_override
+
+    def send_email(source: str, destination: list, content: str):
+        assert False
+
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'api/1/event_5.ics/subscribe', data=json.dumps({'updates': True, 'email': 'koi'}), headers={'X-Admin': 'true'}, content_type='application/json')
+    assert response.status_code == 400
+    assert response.data == b'Invalid email address: koi'

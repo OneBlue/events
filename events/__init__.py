@@ -6,11 +6,12 @@ import logging
 import traceback
 import itertools
 import importlib.util
+import json
 from humanize import naturaldelta
 from icalendar import vCalAddress
 from flask import Flask, request, render_template, Response
 from .errors import *
-from .subscribe import send_event_email, subscribe_to_event
+from .subscribe import send_event_email, subscribe_to_event, validate_email
 from datetime import datetime, date, timedelta
 from tzlocal import get_localzone
 from flask import request, redirect
@@ -21,6 +22,9 @@ from dateutil.rrule import rrulestr
 
 settings = None
 app = Flask(__name__)
+csrf = CSRFProtect()
+csrf.init_app(app)
+
 
 def get_collection(collection: str):
     matched_collection = settings.collections.get(collection)
@@ -168,22 +172,56 @@ def subscribe(collection, event_id):
         raise HTTPException(400, 'Invalid request: missing parameter')
 
     already_subscribed = False
-    if updates and updates == 'on':
+
+    try:
+        if updates and updates == 'on':
+            try:
+                subscribe_to_event(event, event_id, matched_collection, email)
+            except AlreadySubscribed:
+                already_subscribed = True
+            except:
+                logging.error('Failed to subscribe to event: ' + traceback.format_exc())
+                raise
+
+        logging.info(f'Emailing event {event_id} to {email}')
+        send_event_email(event, email, settings)
+
+        if already_subscribed:
+            return render_event(collection, event_id, event, notification= f'{email} is already subscribed to this event. New invite sent. Check your spam folder')
+        else:
+            return render_event(collection, event_id, event, notification=f'Event sent to {email}, check your spam folder')
+    except InvalidEmailAddress as e:
+        return render_event(collection, event_id, event, notification= f'Invalid email: {str(e)}')
+
+@app.route('/api/<collection>/<event_id>/subscribe', methods=['POST'])
+@csrf.exempt
+def subscribe_api(collection, event_id):
+    admin_only()
+
+    matched_collection = get_collection(collection)
+    event = matched_collection.get_event(event_id)
+    if not event:
+        raise NotFoundException(f'Event {event_id} not found in collection {collection}')
+
+    body = request.get_json()
+    email = body.get('email', None)
+    updates = body.get('updates', None)
+    if email is None or updates is None or not isinstance(updates, bool) :
+        raise HTTPException(400, 'Invalid request: Missing parameter')
+
+    try:
         try:
-            subscribe_to_event(event, event_id, matched_collection, email)
+            if updates:
+                subscribe_to_event(event, event_id, matched_collection, email)
         except AlreadySubscribed:
-            already_subscribed = True
-        except:
-            logging.error('Failed to subscribe to event: ' + traceback.format_exc())
-            raise
+            pass
 
-    logging.info(f'Emailing event {event_id} to {email}')
-    send_event_email(event, email, settings)
+        logging.info(f'Emailing event {event_id} to {email}')
+        send_event_email(event, email, settings)
+    except InvalidEmailAddress as e:
+        return e.message, 400
 
-    if already_subscribed:
-        return render_event(collection, event_id, event, notification= f'{email} is already subscribed to this event. New invite sent. Check your spam folder')
-    else:
-        return render_event(collection, event_id, event, notification=f'Event sent to {email}, check your spam folder')
+    return '', 200
 
 @app.route('/<collection>/<event>/ics', methods=['GET'])
 def event_ics(collection, event):
@@ -288,10 +326,7 @@ def create_app(config=None):
 
     global settings
     settings = config
-
     app.secret_key = settings.secret_key
-    csrf = CSRFProtect()
-    csrf.init_app(app)
 
     return app
 

@@ -4,9 +4,8 @@ import icalendar
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
-from email.utils import COMMASPACE, formatdate
+from email.utils import COMMASPACE, formatdate, parseaddr
 from email import encoders
-from email.utils import COMMASPACE, formatdate
 from .errors import *
 
 
@@ -17,7 +16,17 @@ def override_send_email(method):
     global send_email_override
     send_email_override = method
 
+
+def validate_email(email: str):
+    try:
+        if not '@' in parseaddr(email)[1]:
+            raise InvalidEmailAddress(email)
+    except:
+        raise InvalidEmailAddress(email)
+
 def subscribe_to_event(event, event_name, collection, email):
+    validate_email(email)
+
     component = next(e for e in event.subcomponents if 'summary' in e)
     attendees = component.get('attendee')
 
@@ -33,8 +42,9 @@ def subscribe_to_event(event, event_name, collection, email):
 
     collection.save_event(event_name, event)
 
-
 def send_event_email(event, destination, settings):
+    validate_email(destination)
+
     component = next(e for e in event.subcomponents if 'summary' in e)
 
     cal = icalendar.Calendar()
