@@ -15,6 +15,7 @@ setup(
         'humanize==3.12.0',
         'pytest==6.2.5',
         'tzlocal==2.1',
-        'ecdsa==0.16.1'
+        'ecdsa==0.16.1',
+        'requests>=2.24.0'
         ]
     )

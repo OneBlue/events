@@ -106,6 +106,9 @@ class Collection:
         if '/' in name:
             raise SuspiciousRequest('Suspicous event name: ' + name)
 
+        if not name.endswith('.ics'): # Handle ics-less URLS
+            name = name + '.ics'
+
         response = requests.put(self.url + name, auth=self.auth, data=event.to_ical())
         response.raise_for_status()
 
