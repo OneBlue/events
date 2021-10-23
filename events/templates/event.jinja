@@ -38,7 +38,7 @@
 {% if attendees is defined %}
          <tr>
             <th style="background-color:#808080"> Attendees </th>
-            <td>{{ attendees }}</td>
+            <td>{{ attendees|join(', ') }}</td>
          </tr>
 {% endif %}
 

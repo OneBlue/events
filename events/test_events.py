@@ -5,6 +5,7 @@ import json
 from threading import Thread
 from ecdsa import SigningKey
 from .access import *
+from .collection import remove_ics, Collection
 from datetime import datetime, timedelta
 from .errors import *
 from . import create_app
@@ -51,18 +52,19 @@ event_5['uid'] = 'event_5from email.utils import parseaddr'
 
 save_event_override = None
 
-class TestCollection:
-    def get_event(self, name: str):
-        if name == 'event_1.ics':
-            event = event_1
-        elif name == 'event_2.ics':
-            event = event_2
-        elif name == 'event_3.ics':
-            event = event_3
-        elif name == 'event_4.ics':
-            event = event_4
-        elif name == 'event_5.ics':
-            event = event_5
+class CollectionMock(Collection):
+    def __init__(self):
+        super().__init__(None, None)
+
+    def get_event_impl(self, name: str):
+        content = {'event_1': event_1,
+                    'event_2': event_2,
+                    'event_3': event_3,
+                    'event_4': event_4,
+                    'event_5': event_5
+                   }
+
+        event = content.get(remove_ics(name))
 
         if not event:
             raise NotFoundException(f'Event {name} not found')
@@ -81,7 +83,7 @@ class TestCollection:
         return [event_1, event_2, event_3]
 
 class Config:
-    collections = {'1': TestCollection()}
+    collections = {'1': CollectionMock()}
     port = 1111
     host = '127.0.0.1'
     time_format = '%Y-%m-%d %H:%M:%S'
@@ -212,6 +214,22 @@ def test_view_event_ics(client):
 
     assert response.status_code == 200
     assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+
+def test_view_event_ics_old_token(client):
+    token = quote_plus(generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1)))
+    response = client.get(f'/1/event_1/ics?t={token}')
+
+    assert response.status_code == 200
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+
+
+def test_view_event_ics_new_token(client):
+    token = quote_plus(generate_token(settings, '/1/event_1', expires=datetime.now() + timedelta(days=1)))
+    response = client.get(f'/1/event_1/ics?t={token}')
+
+    assert response.status_code == 200
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+
 
 def test_view_event_ics_no_token(client):
     response = client.get(f'/1/event_1.ics/ics')
@@ -535,3 +553,24 @@ def test_subscribe_api_admin_no_bad_email_updates(client):
     response = client.post(f'api/1/event_5.ics/subscribe', data=json.dumps({'updates': True, 'email': 'koi'}), headers={'X-Admin': 'true'}, content_type='application/json')
     assert response.status_code == 400
     assert response.data == b'Invalid email address: koi'
+
+
+def test_event_api_non_admin(client):
+    response = client.get(f'api/1/event_5.ics')
+    assert response.status_code == 404
+
+def test_event_api_admin(client):
+    response = client.get(f'api/1/event_5.ics', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+    assert response.data == b'{"title": "event_5", "start": "2012-10-10 10:00:00", "attendees": ["foo5@bar.com"], "end": null, "description": null, "location": null}'
+
+
+def test_event_api_admin_with_location(client):
+    response = client.get(f'api/1/event_1.ics', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+    assert response.data == b'{"title": "event_1", "start": "2010-10-10 10:00:00", "location": "Location_1", "attendees": ["foo@bar.com"], "end": null, "description": null}'
+
+def test_event_api_admin_without_ics(client):
+    response = client.get(f'api/1/event_4', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+    assert response.data == b'{"title": "event_4", "start": "2012-10-10 10:00:00", "attendees": ["foo@bar.com", "foo2@bar.com", "foo3@bar.com"], "end": null, "description": null, "location": null}'

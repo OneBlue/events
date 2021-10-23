@@ -5,6 +5,13 @@ from .errors import *
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
+
+def remove_ics(path: str) -> str:
+    if path.endswith('.ics'):
+        return path[:-4]
+    else:
+        return path
+
 class Collection:
     def __init__(self, url: str, auth, show_private=False):
         self.url = url
@@ -27,23 +34,32 @@ class Collection:
 
         return True
 
+
+    def get_event_impl(self, name: str):
+        response = requests.get(self.url + name, auth=self.auth)
+        if response.status_code == 404:
+            return None
+
+        response.raise_for_status()
+
+        return icalendar.Calendar.from_ical(response.text)
+
+
     def get_event(self, name: str):
         if '/' in name or '<' in name or '>' in name or '"' in name or "'" in name:
             raise SuspiciousRequest('Suspicous event name: ' + name)
 
-        response = requests.get(self.url + name, auth=self.auth)
-        if response.status_code == 404:
+        # Try with and without the .ics
+        event = self.get_event_impl(name + '.ics') if not name.endswith('.ics') else None
+        event = event or self.get_event_impl(name)
+
+        if not event:
             # Unfortunately the uid doesn't always match the filename.
             # In that case we need to lookup the filename for the UID
             # And issue a redirect to the correct page
 
-            if name.endswith('.ics'):
-                name = name[:-4]
-            raise EventRedirect(self.lookup_event_by_uid(name))
+            raise EventRedirect(self.lookup_event_by_uid(remove_ics(name)))
 
-        response.raise_for_status()
-
-        event = icalendar.Calendar.from_ical(response.text)
         if not self.is_event_visible(event):
             logging.info(f'Attempt to access private event: {name}')
             raise SuspiciousRequest(f'Attempt to access private event: {name}')
@@ -82,7 +98,7 @@ class Collection:
             raise NotFoundException(f'Unique event with UID {uid} not found ({len(entries)} matches)')
 
         # The url might contain the collection name, but all that we want is the file name
-        return entries[0].text.split('/')[-1]
+        return remove_ics(entries[0].text.split('/')[-1])
 
     def save_event(self, name: str, event):
         logging.info(f'Saving event {name} in backend')

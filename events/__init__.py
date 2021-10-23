@@ -12,11 +12,11 @@ from icalendar import vCalAddress
 from flask import Flask, request, render_template, Response
 from .errors import *
 from .subscribe import send_event_email, subscribe_to_event, validate_email
+from .access import validate_token, generate_access_url
 from datetime import datetime, date, timedelta
 from tzlocal import get_localzone
 from flask import request, redirect
 from flask_wtf.csrf import CSRFProtect
-from .access import validate_token, generate_access_url
 from urllib.parse import quote_plus
 from dateutil.rrule import rrulestr
 
@@ -63,25 +63,36 @@ def add_request_auth(fields: dict):
     else:
         return ''
 
-def validate_access():
-    validate_access_impl(request.args.get('t', None))
-
-def validate_access_impl(token: str):
-    if not token:
-        if not settings.is_admin(request):
+def validate_access(token: str = None):
+    token = token or request.args.get('t', None)
+    if token is None:
+        if settings.is_admin(request):
+            return
+        else:
             raise SuspiciousRequest('Missing token')
-    else:
-        try:
-            path = request.path
-            if path.endswith('/ics'):
-                path = path[:-len('/ics')]
-            elif path.endswith('/subscribe'):
-                path = path[:-len('/subscribe')]
-            validate_token(settings, token, path)
-        except ExpiredToken:
+
+    path = request.path
+    if path.endswith('/ics'):
+       path = path[:-len('/ics')]
+    elif path.endswith('/subscribe'):
+       path = path[:-len('/subscribe')]
+
+    try:
+        validate_access_impl(token, path)
+    except InvalidToken as e:
+        # Allow old tokens generated with the .ics
+        if not path.endswith('.ics'):
+            validate_access_impl(token, path + '.ics')
+        else:
             raise
-        except Exception as e:
-            raise InvalidToken() from e
+
+def validate_access_impl(token: str, path: str):
+    try:
+        validate_token(settings, token, path)
+    except ExpiredToken:
+        raise
+    except Exception as e:
+        raise InvalidToken() from e
 
 def get_event_fields(event):
     component = next(e for e in event.subcomponents if 'summary' in e)
@@ -103,9 +114,9 @@ def get_event_fields(event):
     attendees = component.get('attendee')
     if attendees:
         if isinstance(attendees, vCalAddress):
-            event['attendees'] = attendees.lower().replace('mailto:', '')
+            event['attendees'] = [attendees.lower().replace('mailto:', '')]
         else:
-            event['attendees'] = ', '.join([e.lower().replace('mailto:', '') for e in attendees])
+            event['attendees'] = [e.lower().replace('mailto:', '') for e in attendees]
 
     return event
 
@@ -118,7 +129,6 @@ def handle_exception(error: HTTPException):
 
     content = traceback.format_exc().replace('\n', '\r\n') if settings.is_admin(request) else ''
     return content, error.code
-
 
 def render_event(collection_id, event_id, event_data, **extra_fields):
     fields = get_event_fields(event_data)
@@ -158,7 +168,7 @@ def event_page(collection, event):
 
 @app.route('/<collection>/<event_id>/subscribe', methods=['POST'])
 def subscribe(collection, event_id):
-    validate_access_impl(request.form.get('t', None))
+    validate_access(request.form.get('t', None))
 
     matched_collection = get_collection(collection)
     event = matched_collection.get_event(event_id)
@@ -223,6 +233,22 @@ def subscribe_api(collection, event_id):
 
     return '', 200
 
+
+@app.route('/api/<collection>/<event_id>', methods=['GET'])
+def event_api(collection, event_id):
+    admin_only()
+
+    matched_collection = get_collection(collection)
+    event = matched_collection.get_event(event_id)
+
+    content = get_event_fields(event)
+    fields = ['start', 'end', 'description', 'location', 'attendees']
+    for e in fields:
+        if e not in content:
+            content[e] = None
+
+    return json.dumps(content), 200
+
 @app.route('/<collection>/<event>/ics', methods=['GET'])
 def event_ics(collection, event):
     validate_access()
@@ -244,11 +270,7 @@ def make_event_list(events: list, sort_field: str, title: str, max_count: int, a
         # Special treatement for reccurence rules
         def next_occurence(event):
             if 'rrule' in event:
-                try:
-                    rule = rrulestr(event['rrule'].to_ical().decode(), dtstart=rationalize_time(event['dtstart'].dt))
-                except:
-                    import pdb
-                    pdb.post_mortem()
+                rule = rrulestr(event['rrule'].to_ical().decode(), dtstart=rationalize_time(event['dtstart'].dt))
                 return rule.after(now) or rule.before(now) or event['dtstart'].dt
             else:
                 return rationalize_time(event['dtstart'].dt)
