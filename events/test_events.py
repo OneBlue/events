@@ -455,6 +455,7 @@ def test_subscribe_with_csrf_and_token_list_new(client):
     response = client.post(f'/1/event_4.ics/subscribe', data={'email': 'foo3@bar.com', 'csrf_token': client.csrf_token, 't': token, 'updates': 'on'})
 
     assert response.status_code == 200
+    assert response.headers['Set-Cookie'] == 'email=foo3@bar.com; Secure; SameSite=Strict; Path=/'
     assert called
     assert save_called
 

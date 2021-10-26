@@ -17,7 +17,7 @@ from datetime import datetime, date, timedelta
 from tzlocal import get_localzone
 from flask import request, redirect
 from flask_wtf.csrf import CSRFProtect
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse
 from dateutil.rrule import rrulestr
 
 settings = None
@@ -197,9 +197,12 @@ def subscribe(collection, event_id):
         send_event_email(event, email, settings)
 
         if already_subscribed:
-            return render_event(collection, event_id, event, notification= f'{email} is already subscribed to this event. New invite sent. Check your spam folder')
+            response = Response(render_event(collection, event_id, event, notification= f'{email} is already subscribed to this event. New invite sent. Check your spam folder'))
         else:
-            return render_event(collection, event_id, event, notification=f'Event sent to {email}, check your spam folder')
+            response = Response(render_event(collection, event_id, event, notification=f'Event sent to {email}, check your spam folder'))
+
+        response.headers['Set-Cookie'] = f'email={email}; Secure; SameSite=Strict; Path=/'
+        return response
     except InvalidEmailAddress as e:
         return render_event(collection, event_id, event, notification= f'Invalid email: {str(e)}')
 

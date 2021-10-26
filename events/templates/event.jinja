@@ -1,11 +1,32 @@
 <!DOCTYPE html>
 <html>
+
+   <head>
+
+  <script language="JavaScript1.2" type="text/javascript">
+    function setEmailFromCookie()
+    {
+          cookies = document.cookie.split(";");
+          for (var i = 0; i < cookies.length; i++)
+          {
+              cookie = cookies[i].trim().split("=");
+              if (cookie[0] == "email")
+              {
+                  document.form.email.value = cookie[1];
+                  break;
+              }
+          }
+    }
+  </script>
+  </head>
+
    <style>
       table, th, td {
       border:1px solid black;
       }
    </style>
-   <body>
+
+   <body onLoad="setEmailFromCookie()">
       <h2>Calendar entry</h2>
       <table style="width:100%">
          <tr>
@@ -43,7 +64,7 @@
 {% endif %}
 
       </table>
-      <form action="/{{ collection }}/{{ event }}/subscribe" method="post" style="display: inline;">
+      <form name="form" action="/{{ collection }}/{{ event }}/subscribe" method="post" style="display: inline;">
          <input type="email" id="email" name="email" required="required" placeholder="email address">
          <input type="checkbox" id="updates" name="updates" checked>
          <label for="updates">Receive future updates</label>
