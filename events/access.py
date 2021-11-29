@@ -57,5 +57,5 @@ def generate_token(settings, url: str, expires: datetime) -> str:
     # Base64 encode
     return base64.b64encode(bytes).decode()
 
-def generate_access_url(settings, request, expires: datetime) -> str:
-    return settings.external_url + request.path + '?t=' + quote_plus(generate_token(settings, request.path, expires))
+def generate_access_url(settings, path: str, expires: datetime) -> str:
+    return settings.external_url + path + '?t=' + quote_plus(generate_token(settings, path, expires))

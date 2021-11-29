@@ -7,6 +7,8 @@ import traceback
 import itertools
 import importlib.util
 import json
+import icalendar.cal
+import uuid
 from humanize import naturaldelta
 from icalendar import vCalAddress
 from flask import Flask, request, render_template, Response
@@ -141,14 +143,14 @@ def render_event(collection_id, event_id, event_data, **extra_fields):
 
     if settings.is_admin(request):
         fields['admin_links'] = [
-                                {'title': '1 day link', 'url': generate_access_url(settings, request, datetime.now() + timedelta(days=1))},
-                                {'title': '30 days link', 'url': generate_access_url(settings, request, datetime.now() + timedelta(days=30))},
+                                {'title': '1 day link', 'url': generate_access_url(settings, request.path, datetime.now() + timedelta(days=1))},
+                                {'title': '30 days link', 'url': generate_access_url(settings, request.path, datetime.now() + timedelta(days=30))},
                                 ]
 
         component = next(e for e in event_data.subcomponents if 'summary' in e)
         if component and 'dtstart' in component:
             ts = rationalize_time(component['dtstart'].dt)
-            fields['admin_links'].append({'title': 'Event date + 1 week link', 'url': generate_access_url(settings, request, ts + timedelta(days=7))})
+            fields['admin_links'].append({'title': 'Event date + 1 week link', 'url': generate_access_url(settings, request.path, ts + timedelta(days=7))})
 
     return render_template('event.jinja', **fields)
 
@@ -251,6 +253,28 @@ def event_api(collection, event_id):
             content[e] = None
 
     return json.dumps(content), 200
+
+@app.route('/api/<collection>', methods=['POST'])
+@csrf.exempt
+def create_api(collection):
+    admin_only()
+
+    matched_collection = get_collection(collection)
+
+    try:
+        event = icalendar.Calendar.from_ical(request.data)
+    except Exception as e:
+        raise InvalidVCal() from e
+
+    uid = str(uuid.uuid4())
+    event['uid'] = uid
+
+    matched_collection.save_event(uid, event)
+
+    url = f'/{collection}/{uid}.ics'
+    response = {'week_access_url': generate_access_url(settings, url, datetime.now() + timedelta(days=7)), 'uid': uid}
+
+    return json.dumps(response), 200
 
 @app.route('/<collection>/<event>/ics', methods=['GET'])
 def event_ics(collection, event):

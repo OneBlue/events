@@ -48,7 +48,14 @@ event_5 = Event()
 event_5.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
 event_5['summary'] = 'event_5'
 event_5.add('created', datetime(2012, 10, 10, 10, 0, 0))
-event_5['uid'] = 'event_5from email.utils import parseaddr'
+event_5['uid'] = 'event_5'
+
+
+event_6 = Event()
+event_6.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
+event_6['summary'] = 'event_6'
+event_6.add('created', datetime(2012, 10, 10, 10, 0, 0))
+
 
 save_event_override = None
 
@@ -56,15 +63,16 @@ class CollectionMock(Collection):
     def __init__(self):
         super().__init__(None, None)
 
-    def get_event_impl(self, name: str):
-        content = {'event_1': event_1,
-                    'event_2': event_2,
-                    'event_3': event_3,
-                    'event_4': event_4,
-                    'event_5': event_5
-                   }
+        self.content = {'event_1': event_1,
+                        'event_2': event_2,
+                        'event_3': event_3,
+                        'event_4': event_4,
+                        'event_5': event_5,
+                        }
 
-        event = content.get(remove_ics(name))
+    def get_event_impl(self, name: str):
+
+        event = self.content.get(remove_ics(name))
 
         if not event:
             raise NotFoundException(f'Event {name} not found')
@@ -77,6 +85,7 @@ class CollectionMock(Collection):
     def save_event(self, name: str, event):
         global save_event_override
         if save_event_override:
+            self.content[name] = event
             return save_event_override(name, event)
 
     def all_events(self):
@@ -575,3 +584,31 @@ def test_event_api_admin_without_ics(client):
     response = client.get(f'api/1/event_4', headers={'X-Admin': 'true'})
     assert response.status_code == 200
     assert response.data == b'{"title": "event_4", "start": "2012-10-10 10:00:00", "attendees": ["foo@bar.com", "foo2@bar.com", "foo3@bar.com"], "end": null, "description": null, "location": null}'
+
+def test_create_event_without_admin(client):
+    response = client.post(f'api/1', data='')
+    assert response.status_code == 404
+
+def test_create_event_empty_caldav(client):
+    response = client.post(f'api/1', data='', headers={'X-Admin': 'true'})
+    assert response.status_code == 400
+
+def test_create_event_valid(client):
+    uid = None
+    def save_event(name: str, event):
+        nonlocal uid
+        uid = event['uid']
+        assert name == uid
+        assert event['summary'] == 'event_6'
+
+    global save_event_override
+    save_event_override = save_event
+
+    response = client.post(f'api/1', data=event_6.to_ical(), headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+
+    content = json.loads(response.data)
+    assert content['uid'] == uid
+
+    page_response = client.get(content['week_access_url'])
+    assert page_response.status_code == 200
