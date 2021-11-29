@@ -31,7 +31,7 @@ csrf.init_app(app)
 def get_collection(collection: str):
     matched_collection = settings.collections.get(collection)
     if not matched_collection:
-        raise NotFoundExceptionf(f'Collection {collection} not found')
+        raise NotFoundException(f'Collection {collection} not found')
 
     return matched_collection
 
@@ -266,8 +266,21 @@ def create_api(collection):
     except Exception as e:
         raise InvalidVCal() from e
 
+    if not isinstance(event, icalendar.cal.Calendar):
+        logging.error(f'Unexpected vcal type: {type(event)}')
+        raise InvalidVCal()
+
+    if not event.subcomponents:
+        logging.error('VCAl has no subcomponents')
+        raise InvalidVCal()
+
+    vevent = event.subcomponents[0]
+    if not isinstance(vevent, icalendar.Event):
+        logging.error(f'Unexpected vevent type: {type(vevent)}')
+        raise InvalidVCal()
+
     uid = str(uuid.uuid4())
-    event['uid'] = uid
+    vevent['uid'] = uid
 
     matched_collection.save_event(uid, event)
 

@@ -110,7 +110,10 @@ class Collection:
             name = name + '.ics'
 
         response = requests.put(self.url + name, auth=self.auth, data=event.to_ical())
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception as e:
+            raise RuntimeError(f'Error while saving event. Body: "{e.response.text}"') from e 
 
     def all_events(self):
         response = requests.get(self.url, auth=self.auth)

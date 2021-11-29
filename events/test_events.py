@@ -85,7 +85,7 @@ class CollectionMock(Collection):
     def save_event(self, name: str, event):
         global save_event_override
         if save_event_override:
-            self.content[name] = event
+            self.content[name] = event.subcomponents[0]
             return save_event_override(name, event)
 
     def all_events(self):
@@ -593,18 +593,37 @@ def test_create_event_empty_caldav(client):
     response = client.post(f'api/1', data='', headers={'X-Admin': 'true'})
     assert response.status_code == 400
 
+
+def test_create_event_valid_vevent(client):
+    response = client.post(f'api/1', data=event_6.to_ical(), headers={'X-Admin': 'true'})
+    assert response.status_code == 400
+
+def test_create_event_valid_no_sub_components(client):
+    response = client.post(f'api/1', data=Calendar().to_ical(), headers={'X-Admin': 'true'})
+    assert response.status_code == 400
+
+def test_create_event_valid_no_bad_component(client):
+    calendar = Calendar()
+    calendar.add_component(Calendar())
+    response = client.post(f'api/1', data=calendar.to_ical(), headers={'X-Admin': 'true'})
+    assert response.status_code == 400
+
+
 def test_create_event_valid(client):
     uid = None
     def save_event(name: str, event):
         nonlocal uid
-        uid = event['uid']
+        uid = event.subcomponents[0]['uid']
         assert name == uid
-        assert event['summary'] == 'event_6'
+        assert event.subcomponents[0]['summary'] == 'event_6'
 
     global save_event_override
     save_event_override = save_event
 
-    response = client.post(f'api/1', data=event_6.to_ical(), headers={'X-Admin': 'true'})
+    calendar = Calendar()
+    calendar.add_component(event_6)
+
+    response = client.post(f'api/1', data=calendar.to_ical(), headers={'X-Admin': 'true'})
     assert response.status_code == 200
 
     content = json.loads(response.data)
