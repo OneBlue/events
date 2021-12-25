@@ -47,6 +47,9 @@ def send_event_email(event, destination, settings):
 
     component = next(e for e in event.subcomponents if 'summary' in e)
 
+    if not 'organizer' in component and settings.default_event_organizer:
+        component.add('organizer', settings.default_event_organizer)
+
     cal = icalendar.Calendar()
     cal.add('prodid', '-//events.bluecode.fr')
     cal.add('version', '2.0')

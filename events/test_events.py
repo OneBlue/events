@@ -2,6 +2,7 @@ import logging
 import os
 import pytest
 import json
+import email
 from threading import Thread
 from ecdsa import SigningKey
 from .access import *
@@ -10,7 +11,7 @@ from datetime import datetime, timedelta
 from .errors import *
 from . import create_app
 from .subscribe import override_send_email, send_event_email, subscribe_to_event
-from icalendar import Calendar, Event
+from icalendar import Calendar, Event, vCalAddress
 from urllib.parse import quote_plus
 from flask_wtf.csrf import generate_csrf
 from flask import session, current_app, session
@@ -50,11 +51,17 @@ event_5['summary'] = 'event_5'
 event_5.add('created', datetime(2012, 10, 10, 10, 0, 0))
 event_5['uid'] = 'event_5'
 
-
 event_6 = Event()
 event_6.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
 event_6['summary'] = 'event_6'
 event_6.add('created', datetime(2012, 10, 10, 10, 0, 0))
+
+event_7 = Event()
+event_7.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
+event_7['summary'] = 'event_7'
+event_7.add('created', datetime(2012, 10, 10, 10, 0, 0))
+event_7['uid'] = 'event_7'
+event_7.add('organizer', vCalAddress('MAILTO:organizer@foo.com'))
 
 
 save_event_override = None
@@ -68,6 +75,7 @@ class CollectionMock(Collection):
                         'event_3': event_3,
                         'event_4': event_4,
                         'event_5': event_5,
+                        'event_7': event_7,
                         }
 
     def get_event_impl(self, name: str):
@@ -101,6 +109,7 @@ class Config:
     smtp_port = 1112
     secret_key = os.urandom(32)
     recent_count = 20
+    default_event_organizer = vCalAddress('MAILTO:default_organizer@foo.com')
 
     external_url = 'http://127.0.0.1:1111'
     signing_key = SigningKey.generate()
@@ -206,7 +215,6 @@ def test_view_event_expired_token(client):
 def test_view_event_bad_token_url(client):
     token = quote_plus(generate_token(settings, '/1/event_2.ics', expires=datetime.now() - timedelta(days=1)))
     response = client.get(f'/1/event_1.ics?t={token}')
-
     assert response.status_code == 404
 
 def test_view_event(client):
@@ -351,7 +359,6 @@ def test_subscribe_bad_email_with_updates(client):
     save_event_override = save_event
 
     override_send_email(send_email)
-
     token = generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1))
     response = client.post(f'/1/event_1.ics/subscribe', data={'email': 'foo', 'csrf_token': client.csrf_token, 't': token, 'updates': 'on'})
 
@@ -631,3 +638,68 @@ def test_create_event_valid(client):
 
     page_response = client.get(content['week_access_url'])
     assert page_response.status_code == 200
+
+
+def test_add_default_organizer(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo@bar.com']
+        assert 'Subject: event_1' in content
+
+        message = email.message_from_string(content)
+        cal_content = next(e for e in message.walk() if e.get_content_type() == 'text/calendar').get_payload(decode=True)
+        vcal = Calendar.from_ical(cal_content)
+        vevent = vcal.subcomponents[0]
+
+        assert vevent['organizer'].to_ical() == b'MAILTO:default_organizer@foo.com'
+        called = True
+
+    def save_event(*args):
+        assert False
+
+    save_event_override = save_event
+
+    override_send_email(send_email)
+
+    token = generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1))
+    response = client.post(f'/1/event_1.ics/subscribe', data={'email': 'foo@bar.com', 'csrf_token': client.csrf_token, 't': token})
+
+    assert response.status_code == 200
+    assert called
+
+def test_dont_override_existing_organizer(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo@bar.com']
+        assert 'Subject: event_7' in content
+
+        message = email.message_from_string(content)
+        cal_content = next(e for e in message.walk() if e.get_content_type() == 'text/calendar').get_payload(decode=True)
+        vcal = Calendar.from_ical(cal_content)
+        vevent = vcal.subcomponents[0]
+
+        assert vevent['organizer'].to_ical() == b'MAILTO:organizer@foo.com'
+        called = True
+
+    def save_event(*args):
+        assert False
+
+    save_event_override = save_event
+
+    override_send_email(send_email)
+
+    token = generate_token(settings, '/1/event_7.ics', expires=datetime.now() + timedelta(days=1))
+    response = client.post(f'/1/event_7.ics/subscribe', data={'email': 'foo@bar.com', 'csrf_token': client.csrf_token, 't': token})
+
+    assert response.status_code == 200
+    assert called
+
+

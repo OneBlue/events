@@ -113,7 +113,7 @@ class Collection:
         try:
             response.raise_for_status()
         except Exception as e:
-            raise RuntimeError(f'Error while saving event. Body: "{e.response.text}"') from e 
+            raise RuntimeError(f'Error while saving event. Body: "{e.response.text}"') from e
 
     def all_events(self):
         response = requests.get(self.url, auth=self.auth)
