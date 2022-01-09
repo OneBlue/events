@@ -63,6 +63,13 @@ event_7.add('created', datetime(2012, 10, 10, 10, 0, 0))
 event_7['uid'] = 'event_7'
 event_7.add('organizer', vCalAddress('MAILTO:organizer@foo.com'))
 
+event_8 = Event()
+event_8.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
+event_8['summary'] = 'event_8'
+event_8.add('created', datetime(2012, 10, 10, 10, 0, 0))
+event_8['uid'] = 'event_8'
+event_8['description'] = '-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::- Dummy gcal content. -::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-'
+
 
 save_event_override = None
 
@@ -76,6 +83,7 @@ class CollectionMock(Collection):
                         'event_4': event_4,
                         'event_5': event_5,
                         'event_7': event_7,
+                        'event_8': event_8,
                         }
 
     def get_event_impl(self, name: str):
@@ -702,4 +710,20 @@ def test_dont_override_existing_organizer(client):
     assert response.status_code == 200
     assert called
 
+def test_view_event_gmail_filter(client):
+    token = quote_plus(generate_token(settings, '/1/event_8.ics', expires=datetime.now() + timedelta(days=1)))
+    response = client.get(f'/1/event_8.ics?t={token}')
+
+    assert response.status_code == 200
+    assert 'Admin' not in response.data.decode()
+    assert 'event_8' in response.data.decode()
+    assert 'gcal' not in response.data.decode()
+
+def test_view_event_gmail_filter_ics(client):
+    token = quote_plus(generate_token(settings, '/1/event_8.ics', expires=datetime.now() + timedelta(days=1)))
+    response = client.get(f'/1/event_8.ics/ics?t={token}')
+
+    assert response.status_code == 200
+    assert 'event_8' in response.data.decode()
+    assert 'gcal' in response.data.decode()
 

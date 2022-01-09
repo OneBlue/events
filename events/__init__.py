@@ -9,6 +9,7 @@ import importlib.util
 import json
 import icalendar.cal
 import uuid
+import re
 from humanize import naturaldelta
 from icalendar import vCalAddress
 from flask import Flask, request, render_template, Response
@@ -22,11 +23,12 @@ from flask_wtf.csrf import CSRFProtect
 from urllib.parse import quote_plus, urlparse
 from dateutil.rrule import rrulestr
 
+GCALENDAR_FILTER  = r'-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-.*-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-'
+
 settings = None
 app = Flask(__name__)
 csrf = CSRFProtect()
 csrf.init_app(app)
-
 
 def get_collection(collection: str):
     matched_collection = settings.collections.get(collection)
@@ -151,6 +153,10 @@ def render_event(collection_id, event_id, event_data, **extra_fields):
         if component and 'dtstart' in component:
             ts = rationalize_time(component['dtstart'].dt)
             fields['admin_links'].append({'title': 'Event date + 1 week link', 'url': generate_access_url(settings, request.path, ts + timedelta(days=7))})
+
+
+    if 'description' in fields:
+        fields['description'] = re.sub(GCALENDAR_FILTER, '', fields['description'])
 
     return render_template('event.jinja', **fields)
 
