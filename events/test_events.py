@@ -718,6 +718,7 @@ def test_view_event_gmail_filter(client):
     assert 'Admin' not in response.data.decode()
     assert 'event_8' in response.data.decode()
     assert 'gcal' not in response.data.decode()
+    assert '[GCAL content filtered]' in response.data.decode()
 
 def test_view_event_gmail_filter_ics(client):
     token = quote_plus(generate_token(settings, '/1/event_8.ics', expires=datetime.now() + timedelta(days=1)))
