@@ -61,6 +61,7 @@ event_7.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
 event_7['summary'] = 'event_7'
 event_7.add('created', datetime(2012, 10, 10, 10, 0, 0))
 event_7['uid'] = 'event_7'
+event_7['description'] = 'description for event_7'
 event_7.add('organizer', vCalAddress('MAILTO:organizer@foo.com'))
 
 event_8 = Event()
@@ -599,7 +600,6 @@ def test_event_api_admin_without_ics(client):
     response = client.get(f'api/1/event_4', headers={'X-Admin': 'true'})
     assert response.status_code == 200
     assert response.data == b'{"title": "event_4", "start": "2012-10-10 10:00:00", "attendees": ["foo@bar.com", "foo2@bar.com", "foo3@bar.com"], "end": null, "description": null, "location": null}'
-
 def test_create_event_without_admin(client):
     response = client.post(f'api/1', data='')
     assert response.status_code == 404
@@ -719,6 +719,16 @@ def test_view_event_gmail_filter(client):
     assert 'event_8' in response.data.decode()
     assert 'gcal' not in response.data.decode()
     assert '[GCAL content filtered]' in response.data.decode()
+
+def test_view_event_gmail_filter_negative(client):
+    token = quote_plus(generate_token(settings, '/1/event_7.ics', expires=datetime.now() + timedelta(days=1)))
+    response = client.get(f'/1/event_7.ics?t={token}')
+
+    assert response.status_code == 200
+    assert 'event_7' in response.data.decode()
+    assert 'description for event_7' in response.data.decode()
+    assert '[GCAL content filtered]' not in response.data.decode()
+
 
 def test_view_event_gmail_filter_ics(client):
     token = quote_plus(generate_token(settings, '/1/event_8.ics', expires=datetime.now() + timedelta(days=1)))

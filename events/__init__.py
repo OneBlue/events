@@ -156,7 +156,7 @@ def render_event(collection_id, event_id, event_data, **extra_fields):
 
 
     if 'description' in fields:
-        fields['description'] = re.sub(GCALENDAR_FILTER, fields['description'], '[GCAL content filtered]')
+        fields['description'] = re.sub(GCALENDAR_FILTER, '[GCAL content filtered]', fields['description'])
 
     return render_template('event.jinja', **fields)
 
