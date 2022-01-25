@@ -71,6 +71,16 @@ event_8.add('created', datetime(2012, 10, 10, 10, 0, 0))
 event_8['uid'] = 'event_8'
 event_8['description'] = '-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::- Dummy gcal content. -::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-'
 
+event_9 = Event()
+event_9.add('dtstart', datetime(2012, 10, 10, 10, 0, 0))
+event_9['summary'] = 'event_9'
+event_9.add('created', datetime(2012, 10, 10, 10, 0, 0))
+event_9['uid'] = 'event_9'
+event_9['description'] = '''-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::- Dummy
+                                                                                                                    gcal
+                                                                                                                    content
+                                                                                                                    (multine)
+                            -::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-'''
 
 save_event_override = None
 
@@ -85,6 +95,7 @@ class CollectionMock(Collection):
                         'event_5': event_5,
                         'event_7': event_7,
                         'event_8': event_8,
+                        'event_9': event_9,
                         }
 
     def get_event_impl(self, name: str):
@@ -719,6 +730,17 @@ def test_view_event_gmail_filter(client):
     assert 'event_8' in response.data.decode()
     assert 'gcal' not in response.data.decode()
     assert '[GCAL content filtered]' in response.data.decode()
+
+def test_view_event_gmail_filter_multiline(client):
+    token = quote_plus(generate_token(settings, '/1/event_9.ics', expires=datetime.now() + timedelta(days=1)))
+    response = client.get(f'/1/event_9.ics?t={token}')
+
+    assert response.status_code == 200
+    assert 'Admin' not in response.data.decode()
+    assert 'event_9' in response.data.decode()
+    assert 'gcal' not in response.data.decode()
+    assert '[GCAL content filtered]' in response.data.decode()
+
 
 def test_view_event_gmail_filter_negative(client):
     token = quote_plus(generate_token(settings, '/1/event_7.ics', expires=datetime.now() + timedelta(days=1)))
