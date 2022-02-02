@@ -7,7 +7,7 @@ from threading import Thread
 from ecdsa import SigningKey
 from .access import *
 from .collection import remove_ics, Collection
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from .errors import *
 from . import create_app
 from .subscribe import override_send_email, send_event_email, subscribe_to_event
@@ -82,6 +82,14 @@ event_9['description'] = '''-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:
                                                                                                                     (multine)
                             -::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-'''
 
+
+event_10 = Event()
+event_10.add('dtstart', date(2012, 10, 10))
+event_10['summary'] = 'event_10'
+event_10.add('dtend', datetime(2012, 10, 10, 10, 0, 0))
+event_10['uid'] = 'event_10'
+
+
 save_event_override = None
 
 class CollectionMock(Collection):
@@ -96,6 +104,7 @@ class CollectionMock(Collection):
                         'event_7': event_7,
                         'event_8': event_8,
                         'event_9': event_9,
+                        'event_10': event_10,
                         }
 
     def get_event_impl(self, name: str):
@@ -266,7 +275,6 @@ def test_view_event_ics_new_token(client):
 
     assert response.status_code == 200
     assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
-
 
 def test_view_event_ics_no_token(client):
     response = client.get(f'/1/event_1.ics/ics')
@@ -599,18 +607,25 @@ def test_event_api_non_admin(client):
 def test_event_api_admin(client):
     response = client.get(f'api/1/event_5.ics', headers={'X-Admin': 'true'})
     assert response.status_code == 200
-    assert response.data == b'{"title": "event_5", "start": "2012-10-10 10:00:00", "attendees": ["foo5@bar.com"], "end": null, "description": null, "location": null}'
+    assert response.data == b'{"title": "event_5", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo5@bar.com"], "end": null, "description": null, "location": null}'
 
 
 def test_event_api_admin_with_location(client):
     response = client.get(f'api/1/event_1.ics', headers={'X-Admin': 'true'})
     assert response.status_code == 200
-    assert response.data == b'{"title": "event_1", "start": "2010-10-10 10:00:00", "location": "Location_1", "attendees": ["foo@bar.com"], "end": null, "description": null}'
+    assert response.data == b'{"title": "event_1", "start": "2010-10-10 10:00:00", "start_ts": 1286730000.0, "location": "Location_1", "attendees": ["foo@bar.com"], "end": null, "description": null}'
 
 def test_event_api_admin_without_ics(client):
     response = client.get(f'api/1/event_4', headers={'X-Admin': 'true'})
     assert response.status_code == 200
-    assert response.data == b'{"title": "event_4", "start": "2012-10-10 10:00:00", "attendees": ["foo@bar.com", "foo2@bar.com", "foo3@bar.com"], "end": null, "description": null, "location": null}'
+    assert response.data == b'{"title": "event_4", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo@bar.com", "foo2@bar.com", "foo3@bar.com"], "end": null, "description": null, "location": null}'
+
+def test_event_api_admin_with_end(client):
+    response = client.get(f'api/1/event_10', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+    print(response.data)
+    assert response.data == b'{"title": "event_10", "start": "2012-10-10 00:00:00", "start_ts": 1349852400.0, "end": "2012-10-10 10:00:00", "end_ts": 1349888400.0, "description": null, "location": null, "attendees": null}'
+
 def test_create_event_without_admin(client):
     response = client.post(f'api/1', data='')
     assert response.status_code == 404
