@@ -6,17 +6,45 @@
   <script language="JavaScript1.2" type="text/javascript">
     function setEmailFromCookie()
     {
-          cookies = document.cookie.split(";");
-          for (var i = 0; i < cookies.length; i++)
-          {
-              cookie = cookies[i].trim().split("=");
-              if (cookie[0] == "email")
-              {
-                  document.form.email.value = cookie[1];
-                  break;
-              }
-          }
+        cookies = document.cookie.split(";");
+        for (var i = 0; i < cookies.length; i++)
+        {
+            cookie = cookies[i].trim().split("=");
+            if (cookie[0] == "email")
+            {
+                document.form.email.value = cookie[1];
+                break;
+            }
+        }
     }
+
+    function localizeDate(ts)
+    {
+        return new Date(ts * 1000).toLocaleString()
+    }
+
+    function setLocalTime()
+    {
+        server_tz = "{{ server_timezone }}"
+        tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+        if (tz.toUpperCase() == server_tz.toUpperCase())
+        {
+            return
+        }
+
+        start_date = localizeDate({{ start_ts }}) + " (<b>" + tz + "</b>)"
+        end_date = localizeDate({{ end_ts }}) + " (<b>" + tz + "</b>)"
+
+        document.getElementById('start-date').innerHTML += " (<b>" + server_tz + "</b>) | " + start_date
+        document.getElementById('end-date').innerHTML += " (<b>" + server_tz + "</b>) | " + end_date
+    }
+
+    function onLoad()
+    {
+        setEmailFromCookie()
+        setLocalTime()
+    }
+
   </script>
   </head>
 
@@ -26,7 +54,7 @@
       }
    </style>
 
-   <body onLoad="setEmailFromCookie()">
+   <body onLoad="onLoad()">
       <h2>Calendar entry</h2>
       <table style="width:100%">
          <tr>
@@ -35,13 +63,13 @@
 {% if start is defined %}
          <tr>
            <th style="background-color:#808080"> Start </th>
-           <td>{{ start }} </td>
+           <td id="start-date">{{ start }}</td>
          </tr>
 {% endif %}
 {% if end is defined %}
          <tr>
             <th style="background-color:#808080"> End </th>
-            <td>{{ end }}</td>
+            <td id="end-date">{{ end }}</td>
          </tr>
 {% endif %}
 {% if location is defined %}
