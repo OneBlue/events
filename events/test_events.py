@@ -2,6 +2,7 @@ import logging
 import os
 import pytest
 import json
+import pytz
 import email
 from threading import Thread
 from ecdsa import SigningKey
@@ -16,6 +17,7 @@ from urllib.parse import quote_plus
 from flask_wtf.csrf import generate_csrf
 from flask import session, current_app, session
 from flask.testing import FlaskClient as BaseFlaskClient
+
 
 event_1 = Event()
 event_1.add('dtstart', datetime(2010, 10, 10, 10, 0, 0))
@@ -142,6 +144,7 @@ class Config:
 
     external_url = 'http://127.0.0.1:1111'
     signing_key = SigningKey.generate()
+    timezone = pytz.timezone('US/Pacific')
 
     def is_admin(self, request):
         return request.headers.get('X-Admin', None) == 'true'

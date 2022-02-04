@@ -1,4 +1,5 @@
 import os
+import tzlocal
 from events.collection import Collection
 from requests.auth import HTTPBasicAuth
 from ecdsa import SigningKey
@@ -39,6 +40,9 @@ external_url = 'http://127.0.0.1:8000'
 # SigningKey.generate().to_pem()
 
 signing_key = SigningKey.from_pem('-----BEGIN EC PRIVATE KEY-----\ ...')
+
+# Timezone to use by default
+timezone = tzlocal.get_localzone()
 
 # Method to determine whether a request has admin access
 # (check for credentials, or headers that could be set by a proxy server)

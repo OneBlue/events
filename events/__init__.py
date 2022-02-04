@@ -49,9 +49,9 @@ def get_event(collection: str, event: str):
 def rationalize_time(ts) -> datetime:
     if not isinstance(ts, datetime): # In case of date, convert to datetime (set 00:00)
         assert isinstance(ts, date)
-        return get_localzone().localize(datetime.combine(ts, datetime.min.time()))
+        return settings.timezone.localize(datetime.combine(ts, datetime.min.time()))
     else:
-        return ts.astimezone(get_localzone())
+        return ts.astimezone(settings.timezone)
 
 def format_time(ts) -> str:
         return rationalize_time(ts).strftime(settings.time_format)
