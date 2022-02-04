@@ -7,5 +7,5 @@ pipelines:
           - apt-get update
           - apt-get install -y python3-pip
           - pip3 install . # Test package installation
-          - pytest events
+          - pytest events -vv
 
