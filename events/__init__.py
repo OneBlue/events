@@ -106,7 +106,6 @@ def get_event_fields(event):
     if 'dtstart' in component:
         start = component['dtstart'].dt
         event['start'] = format_time(start)
-
         if not isinstance(start, datetime):
             start = datetime.combine(start, datetime.min.time())
 
@@ -149,7 +148,7 @@ def render_event(collection_id, event_id, event_data, **extra_fields):
     fields = get_event_fields(event_data)
     fields['collection'] = collection_id
     fields['event'] = event_id
-    fields['server_timezone'] = get_localzone().zone
+    fields['server_timezone'] = settings.timezone.zone
     add_request_auth(fields)
 
     for e in extra_fields:
