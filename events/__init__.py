@@ -22,6 +22,7 @@ from flask import request, redirect
 from flask_wtf.csrf import CSRFProtect
 from urllib.parse import quote_plus, urlparse
 from dateutil.rrule import rrulestr
+from functools import cmp_to_key
 
 GCALENDAR_FILTER  = r'-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-.*-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-'
 
@@ -99,7 +100,10 @@ def validate_access_impl(token: str, path: str):
         raise InvalidToken() from e
 
 def get_event_fields(event):
-    component = next(e for e in event.subcomponents if 'summary' in e)
+    if 'summary' in event:
+        component = event
+    else:
+        component = next(e for e in event.subcomponents if 'summary' in e)
 
     event = {'title': str(component['summary'])}
 
@@ -255,6 +259,23 @@ def subscribe_api(collection, event_id):
 
     return '', 200
 
+def event_json(collection: int, event) -> dict:
+    if not 'summary' in event:
+        event = next(e for e in event.subcomponents if 'summary' in e)
+
+    content = get_event_fields(event)
+    fields = ['start', 'end', 'description', 'location', 'attendees']
+    for e in fields:
+        if e not in content:
+            content[e] = None
+
+    if 'dtstart' not in event or 'uid' not in event:
+        content['access_link'] = None
+    else:
+        ts = rationalize_time(event['dtstart'].dt)
+        content['access_link'] = generate_access_url(settings, f'/{collection}/{event["uid"]}', ts + timedelta(days=7))
+
+    return content
 
 @app.route('/api/<collection>/<event_id>', methods=['GET'])
 def event_api(collection, event_id):
@@ -263,13 +284,50 @@ def event_api(collection, event_id):
     matched_collection = get_collection(collection)
     event = matched_collection.get_event(event_id)
 
-    content = get_event_fields(event)
-    fields = ['start', 'end', 'description', 'location', 'attendees']
-    for e in fields:
-        if e not in content:
-            content[e] = None
+    return json.dumps(event_json(collection, event)), 200
 
-    return json.dumps(content), 200
+@app.route('/api/<collection>/search', methods=['POST'])
+@csrf.exempt
+def search_api(collection):
+    admin_only()
+
+    body = json.loads(request.data)
+    search_term = body.get('pattern', '').lower()
+
+    matched_collection = get_collection(collection)
+    matched_events = [e for e in matched_collection.all_events() if search_term in e['summary'].lower()]
+
+    def compare_events(left, right):
+        def cmp(field: str) -> bool:
+            if field not in left and field not in right:
+                return 0
+
+            if not field in left:
+                return -1
+            elif field not in right:
+                return 1
+
+            left_value = rationalize_time(left[field].dt)
+            right_value = rationalize_time(right[field].dt)
+
+            if left_value == right_value:
+                return 0
+            elif left_value > right_value:
+                return 1
+            else:
+                return -1
+
+        res = cmp('LAST-MODIFIED')
+        if res == 0:
+            res = cmp('CREATED')
+            if res == 0:
+                res = cmp('DTSTART')
+
+        return res
+
+    sorted_events = sorted(matched_events, key=cmp_to_key(compare_events), reverse=True)
+
+    return json.dumps([event_json(collection, e) for e in sorted_events]), 200
 
 @app.route('/api/<collection>', methods=['POST'])
 @csrf.exempt

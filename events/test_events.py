@@ -95,6 +95,28 @@ event_10['summary'] = 'event_10'
 event_10.add('dtend', datetime(2012, 10, 10, 10, 0, 0))
 event_10['uid'] = 'event_10'
 
+event_11 = Event()
+event_11.add('dtstart', date(2012, 10, 10))
+event_11['summary'] = 'event_11'
+event_11.add('dtend', datetime(2012, 10, 10, 10, 0, 0))
+event_11['uid'] = 'event_11'
+event_11.add('last-modified', datetime(2012, 10, 10, 10, 0, 0))
+
+
+event_12 = Event()
+event_12.add('dtstart', date(2012, 10, 10))
+event_12['summary'] = 'event_12'
+event_12.add('dtend', datetime(2012, 10, 10, 10, 0, 0))
+event_12['uid'] = 'event_12'
+event_12.add('last-modified', datetime(2013, 10, 10, 10, 0, 0))
+
+event_13 = Event()
+event_13.add('dtstart', date(2012, 10, 10))
+event_13['summary'] = 'event_13'
+event_13.add('dtend', datetime(2012, 10, 10, 10, 0, 0))
+event_13['uid'] = 'event_13'
+event_13.add('last-modified', datetime(2011, 10, 10, 10, 0, 0))
+
 
 save_event_override = None
 
@@ -111,6 +133,9 @@ class CollectionMock(Collection):
                         'event_8': event_8,
                         'event_9': event_9,
                         'event_10': event_10,
+                        'event_11': event_11,
+                        'event_12': event_12,
+                        'event_13': event_13,
                         }
 
     def get_event_impl(self, name: str):
@@ -132,7 +157,7 @@ class CollectionMock(Collection):
             return save_event_override(name, event)
 
     def all_events(self):
-        return [event_1, event_2, event_3]
+        return self.content.values()
 
 class Config:
     collections = {'1': CollectionMock()}
@@ -230,6 +255,35 @@ def test_admin_home(client):
 
     assert response.status_code == 200
 
+def test_search_api_without_admin(client):
+    response = client.post(f'api/1/search', data='')
+    assert response.status_code == 404
+
+def test_search_api_one_match(client):
+    response = client.post(f'api/1/search', data='{"pattern": "event_2"}', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+
+    content = json.loads(response.data)
+    del content[0]['access_link']
+
+    assert content == json.loads('[{"attendees": null,  "description": null,  "end": null,  "location": "location_2",  "start": "2011-10-10 10:00:00",  "start_ts": 1318266000.0,  "title": "event_2"}]')
+
+def test_search_api_no_match(client):
+    response = client.post(f'api/1/search', data='{"pattern": "nomatch"}', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+
+    assert response.data == b'[]'
+
+def test_search_api_multiple_match_sorted(client):
+    response = client.post(f'api/1/search', data='{"pattern": "event_1"}', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+
+    content = json.loads(response.data)
+    order = [e['title'] for e in content]
+
+    assert order == ['event_12', 'event_11', 'event_13', 'event_10', 'event_1']
+
+
 def test_view_event_admin(client):
     response = client.get('/1/event_1.ics', headers={'X-Admin': 'true'})
 
@@ -264,7 +318,6 @@ def test_view_event(client):
 def test_view_event_ics(client):
     token = quote_plus(generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1)))
     response = client.get(f'/1/event_1.ics/ics?t={token}')
-
     assert response.status_code == 200
     assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
@@ -614,24 +667,36 @@ def test_event_api_non_admin(client):
 def test_event_api_admin(client):
     response = client.get(f'api/1/event_5.ics', headers={'X-Admin': 'true'})
     assert response.status_code == 200
-    assert response.data == b'{"title": "event_5", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo5@bar.com"], "end": null, "description": null, "location": null}'
+
+    content = json.loads(response.data)
+    del content['access_link']
+    assert json.dumps(content) == '{"title": "event_5", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo5@bar.com"], "end": null, "description": null, "location": null}'
 
 
 def test_event_api_admin_with_location(client):
     response = client.get(f'api/1/event_1.ics', headers={'X-Admin': 'true'})
     assert response.status_code == 200
-    assert response.data == b'{"title": "event_1", "start": "2010-10-10 10:00:00", "start_ts": 1286730000.0, "location": "Location_1", "attendees": ["foo@bar.com"], "end": null, "description": null}'
+
+    content = json.loads(response.data)
+    del content['access_link']
+    assert json.dumps(content) == '{"title": "event_1", "start": "2010-10-10 10:00:00", "start_ts": 1286730000.0, "location": "Location_1", "attendees": ["foo@bar.com"], "end": null, "description": null}'
 
 def test_event_api_admin_without_ics(client):
     response = client.get(f'api/1/event_4', headers={'X-Admin': 'true'})
     assert response.status_code == 200
-    assert response.data == b'{"title": "event_4", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo@bar.com", "foo2@bar.com", "foo3@bar.com"], "end": null, "description": null, "location": null}'
+
+    content = json.loads(response.data)
+    del content['access_link']
+    assert json.dumps(content) == '{"title": "event_4", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo@bar.com", "foo2@bar.com", "foo3@bar.com"], "end": null, "description": null, "location": null}'
 
 def test_event_api_admin_with_end(client):
     response = client.get(f'api/1/event_10', headers={'X-Admin': 'true'})
     assert response.status_code == 200
-    print(response.data)
-    assert response.data == b'{"title": "event_10", "start": "2012-10-10 00:00:00", "start_ts": 1349852400.0, "end": "2012-10-10 10:00:00", "end_ts": 1349888400.0, "description": null, "location": null, "attendees": null}'
+
+    content = json.loads(response.data)
+    del content['access_link']
+
+    assert json.dumps(content) == '{"title": "event_10", "start": "2012-10-10 00:00:00", "start_ts": 1349852400.0, "end": "2012-10-10 10:00:00", "end_ts": 1349888400.0, "description": null, "location": null, "attendees": null}'
 
 def test_create_event_without_admin(client):
     response = client.post(f'api/1', data='')
