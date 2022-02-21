@@ -99,11 +99,23 @@ def validate_access_impl(token: str, path: str):
     except Exception as e:
         raise InvalidToken() from e
 
-def get_event_fields(event):
+def get_event_component(event):
     if 'summary' in event:
-        component = event
-    else:
-        component = next(e for e in event.subcomponents if 'summary' in e)
+        return event
+
+    components = [e for e in event.subcomponents if e.name == 'VEVENT']
+
+    if not components:
+        raise RuntimeError(f'Not valid components found in event: {event}')
+
+    if len(components) > 2:
+        raise RuntimeError(f'Multiple components found in event: {event}')
+
+    return components[0]
+
+
+def get_event_fields(event):
+    component = get_event_component(event)
 
     event = {'title': str(component['summary'])}
 
@@ -149,6 +161,8 @@ def handle_exception(error: HTTPException):
     return content, error.code
 
 def render_event(collection_id, event_id, event_data, **extra_fields):
+    event = get_event_component(event_data)
+
     fields = get_event_fields(event_data)
     fields['collection'] = collection_id
     fields['event'] = event_id
@@ -164,9 +178,8 @@ def render_event(collection_id, event_id, event_data, **extra_fields):
                                 {'title': '30 days link', 'url': generate_access_url(settings, request.path, datetime.now() + timedelta(days=30))},
                                 ]
 
-        component = next(e for e in event_data.subcomponents if 'summary' in e)
-        if component and 'dtstart' in component:
-            ts = rationalize_time(component['dtstart'].dt)
+        if 'dtstart' in event:
+            ts = rationalize_time(event['dtstart'].dt)
             fields['admin_links'].append({'title': 'Event date + 1 week link', 'url': generate_access_url(settings, request.path, ts + timedelta(days=7))})
 
 
@@ -260,8 +273,7 @@ def subscribe_api(collection, event_id):
     return '', 200
 
 def event_json(collection: int, event) -> dict:
-    if not 'summary' in event:
-        event = next(e for e in event.subcomponents if 'summary' in e)
+    event = get_event_component(event)
 
     content = get_event_fields(event)
     fields = ['start', 'end', 'description', 'location', 'attendees']

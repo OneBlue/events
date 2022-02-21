@@ -13,10 +13,11 @@ def remove_ics(path: str) -> str:
         return path
 
 class Collection:
-    def __init__(self, url: str, auth, show_private=False):
+    def __init__(self, url: str, auth, show_private=False, uid_only=False):
         self.url = url
         self.auth = auth
         self.show_private = show_private
+        self.uid_only=uid_only
 
     def is_event_visible(self, event) -> bool:
         if event.name == 'VTODO':
@@ -49,16 +50,28 @@ class Collection:
         if '/' in name or '<' in name or '>' in name or '"' in name or "'" in name:
             raise SuspiciousRequest('Suspicous event name: ' + name)
 
-        # Try with and without the .ics
-        event = self.get_event_impl(name + '.ics') if not name.endswith('.ics') else None
-        event = event or self.get_event_impl(name)
+        if self.uid_only:
+            # Special case for calendar providers that don't support individual event queries
+            matched_events = [e for e in self.all_events() if e.get('uid') == name]
 
-        if not event:
-            # Unfortunately the uid doesn't always match the filename.
-            # In that case we need to lookup the filename for the UID
-            # And issue a redirect to the correct page
+            if len(matched_events) > 1:
+                raise NotFoundException(f'Multiple events with uid "{name}" found')
 
-            raise EventRedirect(self.lookup_event_by_uid(remove_ics(name)))
+            if not matched_events:
+                raise NotFoundException(f'No event with uid "{name}" found')
+
+            event = matched_events[0]
+        else:
+            # Try with and without the .ics
+            event = self.get_event_impl(name + '.ics') if not name.endswith('.ics') else None
+            event = event or self.get_event_impl(name)
+
+            if not event:
+                # Unfortunately the uid doesn't always match the filename.
+                # In that case we need to lookup the filename for the UID
+                # And issue a redirect to the correct page
+
+                raise EventRedirect(self.lookup_event_by_uid(remove_ics(name)))
 
         if not self.is_event_visible(event):
             logging.info(f'Attempt to access private event: {name}')
