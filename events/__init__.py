@@ -206,7 +206,7 @@ def subscribe(collection, event_id):
     already_subscribed = False
 
     try:
-        if updates and updates == 'on':
+        if updates and updates == 'on' and not matched_collection.read_only:
             try:
                 subscribe_to_event(event, event_id, matched_collection, email)
             except AlreadySubscribed:
@@ -246,7 +246,7 @@ def subscribe_api(collection, event_id):
 
     try:
         try:
-            if updates:
+            if updates and not matched_collection.read_only:
                 subscribe_to_event(event, event_id, matched_collection, email)
         except AlreadySubscribed:
             pass
