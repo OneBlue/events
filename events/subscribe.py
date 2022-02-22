@@ -7,6 +7,7 @@ from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate, parseaddr
 from email import encoders
 from .errors import *
+from .utils import get_event_component
 
 
 # Used for testing
@@ -27,7 +28,7 @@ def validate_email(email: str):
 def subscribe_to_event(event, event_name, collection, email):
     validate_email(email)
 
-    component = next(e for e in event.subcomponents if 'summary' in e)
+    component = get_event_component(event)
     attendees = component.get('attendee')
 
     if attendees:
@@ -45,7 +46,7 @@ def subscribe_to_event(event, event_name, collection, email):
 def send_event_email(event, destination, settings):
     validate_email(destination)
 
-    component = next(e for e in event.subcomponents if 'summary' in e)
+    component = get_event_component(event)
 
     if not 'organizer' in component and settings.default_event_organizer:
         component.add('organizer', settings.default_event_organizer)

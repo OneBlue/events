@@ -16,6 +16,7 @@ from flask import Flask, request, render_template, Response
 from .errors import *
 from .subscribe import send_event_email, subscribe_to_event, validate_email
 from .access import validate_token, generate_access_url
+from .utils import get_event_component
 from datetime import datetime, date, timedelta
 from tzlocal import get_localzone
 from flask import request, redirect
@@ -98,21 +99,6 @@ def validate_access_impl(token: str, path: str):
         raise
     except Exception as e:
         raise InvalidToken() from e
-
-def get_event_component(event):
-    if 'summary' in event:
-        return event
-
-    components = [e for e in event.subcomponents if e.name == 'VEVENT']
-
-    if not components:
-        raise RuntimeError(f'Not valid components found in event: {event}')
-
-    if len(components) > 2:
-        raise RuntimeError(f'Multiple components found in event: {event}')
-
-    return components[0]
-
 
 def get_event_fields(event):
     component = get_event_component(event)
