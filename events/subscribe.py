@@ -43,13 +43,13 @@ def subscribe_to_event(event, event_name, collection, email):
 
     collection.save_event(event_name, event)
 
-def send_event_email(event, destination, settings):
+def send_event_email(event, destination, settings, default_organizer):
     validate_email(destination)
 
     component = get_event_component(event)
 
-    if not 'organizer' in component and settings.default_event_organizer:
-        component.add('organizer', settings.default_event_organizer)
+    if not 'organizer' in component and default_organizer:
+        component.add('organizer', default_organizer)
 
     cal = icalendar.Calendar()
     cal.add('prodid', '-//events.bluecode.fr')

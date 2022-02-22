@@ -13,12 +13,13 @@ def remove_ics(path: str) -> str:
         return path
 
 class Collection:
-    def __init__(self, url: str, auth, show_private=False, uid_only=False, read_only=False):
+    def __init__(self, url: str, auth, show_private=False, uid_only=False, read_only=False, default_organizer=None):
         self.url = url
         self.auth = auth
         self.show_private = show_private
         self.uid_only = uid_only
         self.read_only = read_only
+        self.default_organizer = default_organizer
 
     def is_event_visible(self, event) -> bool:
         if event.name == 'VTODO':

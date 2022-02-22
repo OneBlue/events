@@ -121,8 +121,8 @@ event_13.add('last-modified', datetime(2011, 10, 10, 10, 0, 0))
 save_event_override = None
 
 class CollectionMock(Collection):
-    def __init__(self):
-        super().__init__(None, None)
+    def __init__(self, read_only):
+        super().__init__(None, None, read_only=read_only, default_organizer=vCalAddress('MAILTO:default_organizer@foo.com'))
 
         self.content = {'event_1': event_1,
                         'event_2': event_2,
@@ -160,7 +160,7 @@ class CollectionMock(Collection):
         return self.content.values()
 
 class Config:
-    collections = {'1': CollectionMock()}
+    collections = {'1': CollectionMock(False), '2': CollectionMock(True)}
     port = 1111
     host = '127.0.0.1'
     time_format = '%Y-%m-%d %H:%M:%S'
@@ -169,7 +169,6 @@ class Config:
     smtp_port = 1112
     secret_key = os.urandom(32)
     recent_count = 20
-    default_event_organizer = vCalAddress('MAILTO:default_organizer@foo.com')
 
     external_url = 'http://127.0.0.1:1111'
     signing_key = SigningKey.generate()
@@ -433,6 +432,27 @@ def test_subscribe_bad_email_no_updates(client):
     assert response.status_code == 200
     assert 'Invalid email: foo' in response.data.decode()
 
+def test_subscribe_updates_read_only(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        called = True
+
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
+
+    override_send_email(send_email)
+
+    token = generate_token(settings, '/2/event_1.ics', expires=datetime.now() + timedelta(days=1))
+    response = client.post(f'/2/event_1.ics/subscribe', data={'email': 'foo@bar.com', 'csrf_token': client.csrf_token, 't': token, 'updates': 'on'})
+
+    assert response.status_code == 200
+    assert called
+
 def test_subscribe_bad_email_with_updates(client):
     global save_event_override
 
@@ -577,6 +597,28 @@ def test_subscribe_api_admin_no_json(client):
     response = client.post(f'api/1/event_4.ics/subscribe', data='koi', content_type='application/json', headers={'X-Admin': 'true'})
 
     assert response.status_code == 400
+
+def test_subscribe_api_read_only(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo6@bar.com']
+        assert 'Subject: event_5' in content
+        called = True
+
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'api/2/event_5.ics/subscribe', data=json.dumps({'updates': True, 'email': 'foo6@bar.com'}), headers={'X-Admin': 'true'}, content_type='application/json')
+    assert response.status_code == 200
+    assert called
+
 
 def test_subscribe_api_admin(client):
     global save_event_override

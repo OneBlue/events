@@ -216,7 +216,7 @@ def subscribe(collection, event_id):
                 raise
 
         logging.info(f'Emailing event {event_id} to {email}')
-        send_event_email(event, email, settings)
+        send_event_email(event, email, settings, matched_collection.default_organizer)
 
         if already_subscribed:
             response = Response(render_event(collection, event_id, event, notification= f'{email} is already subscribed to this event. New invite sent. Check your spam folder'))
@@ -252,7 +252,7 @@ def subscribe_api(collection, event_id):
             pass
 
         logging.info(f'Emailing event {event_id} to {email}')
-        send_event_email(event, email, settings)
+        send_event_email(event, email, settings, matched_collection.default_organizer)
     except InvalidEmailAddress as e:
         return e.message, 400
 
