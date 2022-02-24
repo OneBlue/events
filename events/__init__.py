@@ -190,7 +190,8 @@ def event_page(collection, event):
 
 @app.route('/<collection>/<event_id>/subscribe', methods=['POST'])
 def subscribe(collection, event_id):
-    validate_access(request.form.get('t', None))
+    token = request.form.get('t', None)
+    validate_access(token)
 
     matched_collection = get_collection(collection)
     event = matched_collection.get_event(event_id)
@@ -219,9 +220,9 @@ def subscribe(collection, event_id):
         send_event_email(event, email, settings, matched_collection.default_organizer)
 
         if already_subscribed:
-            response = Response(render_event(collection, event_id, event, notification= f'{email} is already subscribed to this event. New invite sent. Check your spam folder'))
+            response = Response(render_event(collection, event_id, event, notification= f'{email} is already subscribed to this event. New invite sent. Check your spam folder', token=token))
         else:
-            response = Response(render_event(collection, event_id, event, notification=f'Event sent to {email}, check your spam folder'))
+            response = Response(render_event(collection, event_id, event, notification=f'Event sent to {email}, check your spam folder', token=token))
 
         response.headers['Set-Cookie'] = f'email={email}; Secure; SameSite=Strict; Path=/'
         return response

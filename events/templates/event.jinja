@@ -105,7 +105,7 @@
 {% if notification is defined %}
   <b style="color:green">{{ notification }}</b> <br/>
 {% endif %}
-  <a href="/{{ collection }}/{{ event }}/ics{% if token is defined %}?t={{token}}{% endif %}">
+  <a href="/{{ collection }}/{{ event }}/ics{% if token is defined and token %}?t={{token}}{% endif %}">
       <button>Download ICS</button>
       </a>
    </body>
