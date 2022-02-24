@@ -346,10 +346,72 @@ def test_view_event_ics_admin(client):
     assert response.status_code == 200
     assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
-def test_subscribe_no_csrf(client):
-    response = client.get(f'/1/event_1.ics/subscribe', data='email=foo@bar.com&updates=on')
+def test_update_no_csrf(client):
+    response = client.post(f'/1/event_1.ics/update', data='')
 
-    assert response.status_code == 405
+    assert response.status_code == 400
+
+def test_update_csrf_no_admin(client):
+    response = client.post(f'/1/event_1.ics/update', data={'csrf_token': client.csrf_token})
+    assert response.status_code == 404
+
+def test_update_csrf_no_admin_with_token(client):
+    token = quote_plus(generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1)))
+    response = client.post(f'/1/event_1.ics/update', data={'csrf_token': client.csrf_token, 't': token})
+    assert response.status_code == 404
+
+def test_update_no_attendees(client):
+    response = client.post(f'/1/event_1.ics/update', data={'csrf_token': client.csrf_token}, headers={'X-Admin': 'true'})
+
+    assert response.status_code == 200
+    assert 'Event has no attendees' in response.data.decode()
+
+def test_update_one_attendee(client):
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo@bar.com']
+        assert 'Subject: event_3' in content
+        called = True
+
+    def save_event(*args):
+        assert False
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'/1/event_3.ics/update', data={'csrf_token': client.csrf_token}, headers={'X-Admin': 'true'})
+
+    assert response.status_code == 200
+    assert 'Event sent to: foo@bar.com' in response.data.decode()
+    assert called
+
+def test_update_two_attendees(client):
+    emails = []
+    def send_email(source: str, destination: list, content: str):
+        nonlocal emails
+        assert source == settings.email_from
+        emails += destination
+        assert 'Subject: event_4' in content
+        called = True
+
+    def save_event(*args):
+        assert False
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'/1/event_4.ics/update', data={'csrf_token': client.csrf_token}, headers={'X-Admin': 'true'})
+
+    assert response.status_code == 200
+    assert 'Event sent to: foo@bar.com, foo2@bar.com' in response.data.decode()
+    assert emails == ['foo@bar.com', 'foo2@bar.com']
+
+def test_subscribe_no_csrf(client):
+    response = client.post(f'/1/event_1.ics/subscribe', data='email=foo@bar.com&updates=on')
+
+    assert response.status_code == 400
 
 def test_subscribe_with_csrf_no_token(client):
     token = quote_plus(generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1)))

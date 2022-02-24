@@ -105,9 +105,14 @@
 {% if notification is defined %}
   <b style="color:green">{{ notification }}</b> <br/>
 {% endif %}
-  <a href="/{{ collection }}/{{ event }}/ics{% if token is defined and token %}?t={{token}}{% endif %}">
-      <button>Download ICS</button>
-      </a>
+  <a href="/{{ collection }}/{{ event }}/ics{% if token is defined and token %}?t={{token}}{% endif %}"><button>Download ICS</button></a>
+{% if admin is defined %}
+  <form onsubmit="return confirm('Send event update ?');" action="/{{ collection }}/{{ event }}/update" method="post" style="display: inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <input type="submit" value="Send update (admin)">
+   </form>
+{% endif %}
+
    </body>
 
 {% if admin_links is defined %}

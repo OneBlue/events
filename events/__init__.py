@@ -46,7 +46,7 @@ def get_event(collection: str, event: str):
     if not matched_event:
         raise NotFoundException(f'Event {event} not found in collection {collection}')
 
-    return matched_event
+    return matched_event, matched_collection
 
 def rationalize_time(ts) -> datetime:
     if not isinstance(ts, datetime): # In case of date, convert to datetime (set 00:00)
@@ -180,21 +180,20 @@ def event_page(collection, event):
     validate_access()
 
     try:
-        event_data = get_event(collection, event)
+        event_data, _ = get_event(collection, event)
     except EventRedirect as e:
         logging.info(f'Redirecting event {event} to {e.filename}')
         assert event.lower() != e.filename.lower()
         return redirect(f'/{collection}/{e.filename}')
 
-    return render_event(collection, event, event_data)
+    return render_event(collection, event, event_data, admin=settings.is_admin(request))
 
 @app.route('/<collection>/<event_id>/subscribe', methods=['POST'])
 def subscribe(collection, event_id):
     token = request.form.get('t', None)
     validate_access(token)
 
-    matched_collection = get_collection(collection)
-    event = matched_collection.get_event(event_id)
+    event, matched_collection = get_event(collection, event_id)
     if not event:
         raise NotFoundException(f'Event {event_id} not found in collection {collection}')
 
@@ -220,22 +219,49 @@ def subscribe(collection, event_id):
         send_event_email(event, email, settings, matched_collection.default_organizer)
 
         if already_subscribed:
-            response = Response(render_event(collection, event_id, event, notification= f'{email} is already subscribed to this event. New invite sent. Check your spam folder', token=token))
+            notification = f'{email} is already subscribed to this event. New invite sent. Check your spam folder'
         else:
-            response = Response(render_event(collection, event_id, event, notification=f'Event sent to {email}, check your spam folder', token=token))
+            notification = f'Event sent to {email}, check your spam folder'
 
+        response = Response(render_event(collection, event_id, event, notification=notification, token=token, admin= not token and settings.is_admin(request)))
         response.headers['Set-Cookie'] = f'email={email}; Secure; SameSite=Strict; Path=/'
         return response
     except InvalidEmailAddress as e:
-        return render_event(collection, event_id, event, notification= f'Invalid email: {str(e)}')
+        return render_event(collection, event_id, event, notification= f'Invalid email: {str(e)}', token=token, admin=not token and settings.is_admin(request))
+
+@app.route('/<collection>/<event_id>/update', methods=['POST'])
+def send_event_update(collection: str, event_id: str):
+    admin_only()
+
+    event, matched_collection = get_event(collection, event_id)
+    component = get_event_component(event)
+
+    attendees = component.get('attendee', None)
+    if isinstance(attendees, icalendar.vCalAddress):
+        emails = [attendees.title().lower()]
+    elif attendees:
+        emails = [e.title().lower() for e in attendees]
+    else:
+        emails = []
+
+    emails = [e.replace('mailto:', '') for e in emails]
+    if not emails:
+        notification = 'Event has no attendees'
+    else:
+        for e in emails:
+            logging.info(f'Emailing event {event_id} to {e}')
+            send_event_email(event, e, settings, matched_collection.default_organizer)
+
+        notification = 'Event sent to: ' + ', '.join(emails)
+
+    return render_event(collection, event_id, event, notification=notification, admin=True)
 
 @app.route('/api/<collection>/<event_id>/subscribe', methods=['POST'])
 @csrf.exempt
 def subscribe_api(collection, event_id):
     admin_only()
 
-    matched_collection = get_collection(collection)
-    event = matched_collection.get_event(event_id)
+    event, matched_collection = get_event(collection, event_id)
     if not event:
         raise NotFoundException(f'Event {event_id} not found in collection {collection}')
 
@@ -280,8 +306,7 @@ def event_json(collection: int, event) -> dict:
 def event_api(collection, event_id):
     admin_only()
 
-    matched_collection = get_collection(collection)
-    event = matched_collection.get_event(event_id)
+    event, matched_collection = get_event(collection, event_id)
 
     return json.dumps(event_json(collection, event)), 200
 
@@ -367,7 +392,7 @@ def create_api(collection):
 def event_ics(collection, event):
     validate_access()
 
-    content = get_event(collection, event).to_ical()
+    content = get_event(collection, event)[0].to_ical()
     response = Response(content)
     response.headers['Content-Disposition'] = f'Attachement; filename="{event}"'
     response.headers['Content-Type'] = f'content-type:text/calendar'
