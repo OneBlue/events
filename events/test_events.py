@@ -25,6 +25,7 @@ time.tzset()
 
 event_1 = Event()
 event_1.add('dtstart', datetime(2010, 10, 10, 10, 0, 0))
+event_1.add('dtend', datetime(2010, 10, 10, 11, 0, 0))
 event_1['summary'] = 'event_1'
 event_1['uid'] = 'event_1'
 event_1.add('location', 'Location_1')
@@ -282,6 +283,57 @@ def test_search_api_multiple_match_sorted(client):
 
     assert order == ['event_12', 'event_11', 'event_13', 'event_10', 'event_1']
 
+def test_search_api_exact(client):
+    response = client.post(f'api/1/search', data='{"pattern": "event_1", "exact": true}', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+
+    content = json.loads(response.data)
+    order = [e['title'] for e in content]
+
+    assert order == ['event_1']
+
+def test_search_api_before(client):
+    before = datetime.timestamp(event_1['dtstart'].dt)
+    response = client.post(f'api/1/search', data=f'{{"pattern": "event_1", "exact": true, "before": {before}}}', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+
+    content = json.loads(response.data)
+    order = [e['title'] for e in content]
+    assert order == ['event_1']
+
+def test_search_api_before_negative(client):
+    before = datetime.timestamp(event_1['dtstart'].dt) - 1
+    response = client.post(f'api/1/search', data=f'{{"pattern": "event_1", "exact": true, "before": {before}}}', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+
+    assert response.data == b'[]'
+
+def test_search_api_after(client):
+    after = datetime.timestamp(event_1['dtend'].dt)
+    response = client.post(f'api/1/search', data=f'{{"pattern": "event_1", "exact": true, "after": {after}}}', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+
+    content = json.loads(response.data)
+    order = [e['title'] for e in content]
+    assert order == ['event_1']
+
+def test_search_api_after_negative(client):
+    after = datetime.timestamp(event_1['dtend'].dt) + 1
+    response = client.post(f'api/1/search', data=f'{{"pattern": "event_1", "exact": true, "after": {after}}}', headers={'X-Admin': 'true'})
+
+    assert response.status_code == 200
+    assert response.data == b'[]'
+
+
+def test_search_api_before_and_after(client):
+    after = datetime.timestamp(event_1['dtend'].dt)
+    before = datetime.timestamp(event_1['dtstart'].dt)
+    response = client.post(f'api/1/search', data=f'{{"pattern": "event", "after": {after}, "before": {before}}}', headers={'X-Admin': 'true'})
+    assert response.status_code == 200
+
+    content = json.loads(response.data)
+    order = [e['title'] for e in content]
+    assert order == ['event_1']
 
 def test_view_event_admin(client):
     response = client.get('/1/event_1.ics', headers={'X-Admin': 'true'})
@@ -318,14 +370,14 @@ def test_view_event_ics(client):
     token = quote_plus(generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1)))
     response = client.get(f'/1/event_1.ics/ics?t={token}')
     assert response.status_code == 200
-    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nDTEND;VALUE=DATE-TIME:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
 def test_view_event_ics_old_token(client):
     token = quote_plus(generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1)))
     response = client.get(f'/1/event_1/ics?t={token}')
 
     assert response.status_code == 200
-    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nDTEND;VALUE=DATE-TIME:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
 
 def test_view_event_ics_new_token(client):
@@ -333,7 +385,7 @@ def test_view_event_ics_new_token(client):
     response = client.get(f'/1/event_1/ics?t={token}')
 
     assert response.status_code == 200
-    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nDTEND;VALUE=DATE-TIME:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
 def test_view_event_ics_no_token(client):
     response = client.get(f'/1/event_1.ics/ics')
@@ -344,7 +396,7 @@ def test_view_event_ics_admin(client):
     response = client.get(f'/1/event_1.ics/ics', headers={'X-Admin': 'true'})
 
     assert response.status_code == 200
-    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nDTEND;VALUE=DATE-TIME:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
 def test_update_no_csrf(client):
     response = client.post(f'/1/event_1.ics/update', data='')
@@ -783,7 +835,7 @@ def test_event_api_admin_with_location(client):
 
     content = json.loads(response.data)
     del content['access_link']
-    assert json.dumps(content) == '{"title": "event_1", "start": "2010-10-10 10:00:00", "start_ts": 1286730000.0, "location": "Location_1", "attendees": ["foo@bar.com"], "end": null, "description": null}'
+    assert json.dumps(content) == '{"title": "event_1", "start": "2010-10-10 10:00:00", "start_ts": 1286730000.0, "end": "2010-10-10 11:00:00", "end_ts": 1286733600.0, "location": "Location_1", "attendees": ["foo@bar.com"], "description": null}'
 
 def test_event_api_admin_without_ics(client):
     response = client.get(f'api/1/event_4', headers={'X-Admin': 'true'})

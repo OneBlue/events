@@ -24,6 +24,7 @@ from flask_wtf.csrf import CSRFProtect
 from urllib.parse import quote_plus, urlparse
 from dateutil.rrule import rrulestr
 from functools import cmp_to_key
+from math import inf
 
 GCALENDAR_FILTER  = r'-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-.*-::~:~::~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~:~::~:~::-'
 
@@ -136,16 +137,6 @@ def get_event_fields(event):
 
     return event
 
-@app.errorhandler(HTTPException)
-def handle_exception(error: HTTPException):
-    logging.error(f'Handling exception: {error}, stack trace: {traceback.format_exc()}')
-
-    if isinstance(error, ExpiredToken):
-        return 'Token expired', 200
-
-    content = traceback.format_exc().replace('\n', '\r\n') if settings.is_admin(request) else ''
-    return content, error.code
-
 def render_event(collection_id, event_id, event_data, **extra_fields):
     event = get_event_component(event_data)
 
@@ -174,6 +165,80 @@ def render_event(collection_id, event_id, event_data, **extra_fields):
 
     return render_template('event.jinja', **fields)
 
+def event_json(collection: int, event) -> dict:
+    event = get_event_component(event)
+
+    content = get_event_fields(event)
+    fields = ['start', 'end', 'description', 'location', 'attendees']
+    for e in fields:
+        if e not in content:
+            content[e] = None
+
+    if 'dtstart' not in event or 'uid' not in event:
+        content['access_link'] = None
+    else:
+        ts = rationalize_time(event['dtstart'].dt)
+        content['access_link'] = generate_access_url(settings, f'/{collection}/{event["uid"]}', ts + timedelta(days=7))
+
+    return content
+
+def make_event_list(events: list, sort_field: str, title: str, max_count: int, allow_nulls=False, reverse=True):
+    sortable_events = (e for e in events if sort_field in e[0])
+
+    now = rationalize_time(datetime.now())
+    if sort_field != 'DTSTART':
+        events_with_date = [(e[0], e[1], rationalize_time(e[0][sort_field].dt)) for e in sortable_events]
+    else:
+        # Special treatement for reccurence rules
+        def next_occurence(event):
+            if 'rrule' in event:
+                rule = rrulestr(event['rrule'].to_ical().decode(), dtstart=rationalize_time(event['dtstart'].dt))
+                return rule.after(now) or rule.before(now) or event['dtstart'].dt
+            else:
+                return rationalize_time(event['dtstart'].dt)
+
+        # Compute next occurence
+        events_with_date = [(e[0], e[1], rationalize_time(e[0][sort_field].dt)) for e in sortable_events]
+
+        # Drop past events
+        events_with_date = [e for e in events_with_date if e[2] >= now]
+
+    entries = sorted(events_with_date, key=lambda event: event[2])
+    if reverse:
+        entries = reversed(entries)
+
+    if sort_field and allow_nulls: # Add non-sortable entries if requested
+        entries = itertools.chain(entries, ((e[0], e[1], None) for e in events if sort_field not in e[0]))
+
+    if max_count: # Slice if requested
+        entries = itertools.islice(entries, 0, max_count)
+
+    def make_event(event, collection, ts):
+        delta = '[NULL]'
+        if ts:
+            if ts > now:
+                delta =  'in ' + naturaldelta(now - ts)
+            else:
+                delta =  naturaldelta(now - ts) + ' ago'
+
+        return {
+                'ts': delta,
+                'collection': collection,
+                'filename': str(event['uid']),
+                'title': str(event['summary'])
+                }
+
+    return {'title': title, 'entries': [make_event(*e) for e in entries]}
+
+@app.errorhandler(HTTPException)
+def handle_exception(error: HTTPException):
+    logging.error(f'Handling exception: {error}, stack trace: {traceback.format_exc()}')
+
+    if isinstance(error, ExpiredToken):
+        return 'Token expired', 200
+
+    content = traceback.format_exc().replace('\n', '\r\n') if settings.is_admin(request) else ''
+    return content, error.code
 
 @app.route('/<collection>/<event>', methods=['GET'])
 def event_page(collection, event):
@@ -285,23 +350,6 @@ def subscribe_api(collection, event_id):
 
     return '', 200
 
-def event_json(collection: int, event) -> dict:
-    event = get_event_component(event)
-
-    content = get_event_fields(event)
-    fields = ['start', 'end', 'description', 'location', 'attendees']
-    for e in fields:
-        if e not in content:
-            content[e] = None
-
-    if 'dtstart' not in event or 'uid' not in event:
-        content['access_link'] = None
-    else:
-        ts = rationalize_time(event['dtstart'].dt)
-        content['access_link'] = generate_access_url(settings, f'/{collection}/{event["uid"]}', ts + timedelta(days=7))
-
-    return content
-
 @app.route('/api/<collection>/<event_id>', methods=['GET'])
 def event_api(collection, event_id):
     admin_only()
@@ -316,10 +364,31 @@ def search_api(collection):
     admin_only()
 
     body = json.loads(request.data)
-    search_term = body.get('pattern', '').lower()
+    search_term = body.get('pattern', '')
+    before = body.get('before', inf)
+    after = body.get('after', 0)
+    exact = body.get('exact', False)
 
     matched_collection = get_collection(collection)
-    matched_events = [e for e in matched_collection.all_events() if search_term in e['summary'].lower()]
+
+    def match(event) -> bool:
+        title = event['summary']
+
+        if (exact and not search_term == title) or (not exact and search_term.lower() not in title.lower()):
+            return False
+
+        if 'dtend' in event:
+            if datetime.timestamp(rationalize_time(event['dtend'].dt)) < after:
+                return False
+
+        if 'dtstart' in event:
+            if datetime.timestamp(rationalize_time(event['dtstart'].dt)) > before:
+                return False
+
+        return True
+
+
+    matched_events = [e for e in matched_collection.all_events() if match(e)]
 
     def compare_events(left, right):
         def cmp(field: str) -> bool:
@@ -398,54 +467,6 @@ def event_ics(collection, event):
     response.headers['Content-Type'] = f'content-type:text/calendar'
 
     return response
-
-def make_event_list(events: list, sort_field: str, title: str, max_count: int, allow_nulls=False, reverse=True):
-    sortable_events = (e for e in events if sort_field in e[0])
-
-    now = rationalize_time(datetime.now())
-    if sort_field != 'DTSTART':
-        events_with_date = [(e[0], e[1], rationalize_time(e[0][sort_field].dt)) for e in sortable_events]
-    else:
-        # Special treatement for reccurence rules
-        def next_occurence(event):
-            if 'rrule' in event:
-                rule = rrulestr(event['rrule'].to_ical().decode(), dtstart=rationalize_time(event['dtstart'].dt))
-                return rule.after(now) or rule.before(now) or event['dtstart'].dt
-            else:
-                return rationalize_time(event['dtstart'].dt)
-
-        # Compute next occurence
-        events_with_date = [(e[0], e[1], rationalize_time(e[0][sort_field].dt)) for e in sortable_events]
-
-        # Drop past events
-        events_with_date = [e for e in events_with_date if e[2] >= now]
-
-    entries = sorted(events_with_date, key=lambda event: event[2])
-    if reverse:
-        entries = reversed(entries)
-
-    if sort_field and allow_nulls: # Add non-sortable entries if requested
-        entries = itertools.chain(entries, ((e[0], e[1], None) for e in events if sort_field not in e[0]))
-
-    if max_count: # Slice if requested
-        entries = itertools.islice(entries, 0, max_count)
-
-    def make_event(event, collection, ts):
-        delta = '[NULL]'
-        if ts:
-            if ts > now:
-                delta =  'in ' + naturaldelta(now - ts)
-            else:
-                delta =  naturaldelta(now - ts) + ' ago'
-
-        return {
-                'ts': delta,
-                'collection': collection,
-                'filename': str(event['uid']),
-                'title': str(event['summary'])
-                }
-
-    return {'title': title, 'entries': [make_event(*e) for e in entries]}
 
 @app.route('/', methods=['GET'])
 def home():
