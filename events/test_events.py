@@ -259,79 +259,78 @@ def test_search_api_without_admin(client):
     response = client.post(f'api/1/search', data='')
     assert response.status_code == 404
 
-def test_search_api_one_match(client):
-    response = client.post(f'api/1/search', data='{"pattern": "event_2"}', headers={'X-Admin': 'true'})
+
+def search_api(client, pattern: str, before: int = None, after: int = None, exact: bool = None) -> list:
+    body = {'pattern': pattern}
+
+    if before is not None:
+        body['before'] = before
+
+    if after is not None:
+        body['after'] = after
+
+    if exact is not None:
+        body['exact'] = exact
+
+    response = client.post(f'api/1/search', data=json.dumps(body), headers={'X-Admin': 'true', 'Content-Type': 'application/json'})
     assert response.status_code == 200
 
-    content = json.loads(response.data)
+    return json.loads(response.data)
+
+def test_search_api_one_match(client):
+    content = search_api(client, 'event_2')
     del content[0]['access_link']
 
     assert content == json.loads('[{"attendees": null,  "description": null,  "end": null,  "location": "location_2",  "start": "2011-10-10 10:00:00",  "start_ts": 1318266000.0,  "title": "event_2"}]')
 
 def test_search_api_no_match(client):
-    response = client.post(f'api/1/search', data='{"pattern": "nomatch"}', headers={'X-Admin': 'true'})
-    assert response.status_code == 200
-
-    assert response.data == b'[]'
+    assert search_api(client, 'nomatch') == []
 
 def test_search_api_multiple_match_sorted(client):
-    response = client.post(f'api/1/search', data='{"pattern": "event_1"}', headers={'X-Admin': 'true'})
-    assert response.status_code == 200
-
-    content = json.loads(response.data)
+    content = search_api(client, "event_1")
     order = [e['title'] for e in content]
 
     assert order == ['event_12', 'event_11', 'event_13', 'event_10', 'event_1']
 
 def test_search_api_exact(client):
-    response = client.post(f'api/1/search', data='{"pattern": "event_1", "exact": true}', headers={'X-Admin': 'true'})
-    assert response.status_code == 200
-
-    content = json.loads(response.data)
+    content = search_api(client, "event_1", exact=True)
     order = [e['title'] for e in content]
 
     assert order == ['event_1']
 
 def test_search_api_before(client):
     before = datetime.timestamp(event_1['dtstart'].dt)
-    response = client.post(f'api/1/search', data=f'{{"pattern": "event_1", "exact": true, "before": {before}}}', headers={'X-Admin': 'true'})
-    assert response.status_code == 200
-
-    content = json.loads(response.data)
+    content = search_api(client, "event_1", exact=True, before=before)
     order = [e['title'] for e in content]
     assert order == ['event_1']
 
 def test_search_api_before_negative(client):
     before = datetime.timestamp(event_1['dtstart'].dt) - 1
-    response = client.post(f'api/1/search', data=f'{{"pattern": "event_1", "exact": true, "before": {before}}}', headers={'X-Admin': 'true'})
-    assert response.status_code == 200
-
-    assert response.data == b'[]'
+    assert search_api(client, "event_1", exact=True, before=before) == []
 
 def test_search_api_after(client):
     after = datetime.timestamp(event_1['dtend'].dt)
-    response = client.post(f'api/1/search', data=f'{{"pattern": "event_1", "exact": true, "after": {after}}}', headers={'X-Admin': 'true'})
-    assert response.status_code == 200
-
-    content = json.loads(response.data)
+    content = search_api(client, "event_1", exact=True, after=after)
     order = [e['title'] for e in content]
     assert order == ['event_1']
 
 def test_search_api_after_negative(client):
     after = datetime.timestamp(event_1['dtend'].dt) + 1
-    response = client.post(f'api/1/search', data=f'{{"pattern": "event_1", "exact": true, "after": {after}}}', headers={'X-Admin': 'true'})
-
-    assert response.status_code == 200
-    assert response.data == b'[]'
-
+    content = search_api(client, "event_1", exact=True, after=after)
+    assert content == []
 
 def test_search_api_before_and_after(client):
     after = datetime.timestamp(event_1['dtend'].dt)
     before = datetime.timestamp(event_1['dtstart'].dt)
-    response = client.post(f'api/1/search', data=f'{{"pattern": "event", "after": {after}, "before": {before}}}', headers={'X-Admin': 'true'})
-    assert response.status_code == 200
+    content = search_api(client, "event_1", exact=True, after=after, before=before)
+    order = [e['title'] for e in content]
+    assert order == ['event_1']
 
-    content = json.loads(response.data)
+
+def test_search_api_strip(client):
+    after = datetime.timestamp(event_1['dtend'].dt)
+    before = datetime.timestamp(event_1['dtstart'].dt)
+    content = search_api(client, " event_1 ", exact=True)
     order = [e['title'] for e in content]
     assert order == ['event_1']
 

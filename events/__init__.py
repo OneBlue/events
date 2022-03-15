@@ -331,6 +331,9 @@ def subscribe_api(collection, event_id):
         raise NotFoundException(f'Event {event_id} not found in collection {collection}')
 
     body = request.get_json()
+    if body is None:
+        raise HTTPException(400, 'Invalid request: empty body')
+
     email = body.get('email', None)
     updates = body.get('updates', None)
     if email is None or updates is None or not isinstance(updates, bool) :
@@ -363,8 +366,11 @@ def event_api(collection, event_id):
 def search_api(collection):
     admin_only()
 
-    body = json.loads(request.data)
-    search_term = body.get('pattern', '')
+    body = request.get_json()
+    if body is None:
+        raise HTTPException(400, 'Invalid request: empty body')
+
+    search_term = body.get('pattern', '').strip()
     before = body.get('before', inf)
     after = body.get('after', 0)
     exact = body.get('exact', False)
@@ -372,7 +378,7 @@ def search_api(collection):
     matched_collection = get_collection(collection)
 
     def match(event) -> bool:
-        title = event['summary']
+        title = event['summary'].strip()
 
         if (exact and not search_term == title) or (not exact and search_term.lower() not in title.lower()):
             return False
