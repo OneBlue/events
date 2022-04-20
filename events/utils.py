@@ -12,4 +12,13 @@ def get_event_component(event):
 
     return components[0]
 
+def increase_event_seq_number(event):
+    component = get_event_component(event)
 
+    if not 'sequence' in component:
+        sequence = 1
+    else:
+        sequence = component['sequence'] + 1
+
+    component['sequence'] = sequence
+    return event

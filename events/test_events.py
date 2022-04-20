@@ -118,6 +118,14 @@ event_13.add('dtend', datetime(2012, 10, 10, 10, 0, 0))
 event_13['uid'] = 'event_13'
 event_13.add('last-modified', datetime(2011, 10, 10, 10, 0, 0))
 
+event_14 = Event()
+event_14.add('dtstart', datetime(2013, 10, 10, 10, 0, 0))
+event_14['summary'] = 'event_14'
+event_14.add('created', datetime(2013, 10, 10, 10, 0, 0))
+event_14['uid'] = 'event_14'
+event_14.add('attendee', 'MAILTO:foo14@bar.com')
+event_14['sequence'] = 11
+
 
 save_event_override = None
 
@@ -137,6 +145,7 @@ class CollectionMock(Collection):
                         'event_11': event_11,
                         'event_12': event_12,
                         'event_13': event_13,
+                        'event_14': event_14,
                         }
 
     def get_event_impl(self, name: str):
@@ -290,7 +299,7 @@ def test_search_api_multiple_match_sorted(client):
     content = search_api(client, "event_1")
     order = [e['title'] for e in content]
 
-    assert order == ['event_12', 'event_11', 'event_13', 'event_10', 'event_1']
+    assert order == ['event_12', 'event_11', 'event_13', 'event_14', 'event_10', 'event_1']
 
 def test_search_api_exact(client):
     content = search_api(client, "event_1", exact=True)
@@ -412,12 +421,20 @@ def test_update_csrf_no_admin_with_token(client):
     assert response.status_code == 404
 
 def test_update_no_attendees(client):
+    global save_event_override
     response = client.post(f'/1/event_1.ics/update', data={'csrf_token': client.csrf_token}, headers={'X-Admin': 'true'})
+
+    def save_event(name: str, event):
+        assert False
+
+    save_event_override = save_event
 
     assert response.status_code == 200
     assert 'Event has no attendees' in response.data.decode()
 
-def test_update_one_attendee(client):
+def test_update_read_only(client):
+    global save_event_override
+
     called = False
     def send_email(source: str, destination: list, content: str):
         nonlocal called
@@ -426,8 +443,35 @@ def test_update_one_attendee(client):
         assert 'Subject: event_3' in content
         called = True
 
-    def save_event(*args):
+    def save_event(name: str, event):
         assert False
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'/2/event_3.ics/update', data={'csrf_token': client.csrf_token}, headers={'X-Admin': 'true'})
+
+    assert response.status_code == 200
+    assert 'Event sent to: foo@bar.com. SEQUENCE=[ABSENT]' in response.data.decode()
+    assert called
+
+def test_update_one_attendee(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo@bar.com']
+        assert 'Subject: event_3' in content
+        called = True
+
+    saved = False
+    def save_event(name: str, event):
+        nonlocal saved
+        saved= True
+
+        assert event.subcomponents[0]['sequence'] == 1
 
     save_event_override = save_event
     override_send_email(send_email)
@@ -435,10 +479,12 @@ def test_update_one_attendee(client):
     response = client.post(f'/1/event_3.ics/update', data={'csrf_token': client.csrf_token}, headers={'X-Admin': 'true'})
 
     assert response.status_code == 200
-    assert 'Event sent to: foo@bar.com' in response.data.decode()
+    assert 'Event sent to: foo@bar.com. SEQUENCE=1' in response.data.decode()
     assert called
+    assert saved
 
 def test_update_two_attendees(client):
+    global save_event_override
     emails = []
     def send_email(source: str, destination: list, content: str):
         nonlocal emails
@@ -447,8 +493,12 @@ def test_update_two_attendees(client):
         assert 'Subject: event_4' in content
         called = True
 
-    def save_event(*args):
-        assert False
+    saved = False
+    def save_event(name: str, event):
+        nonlocal saved
+        saved= True
+
+        assert event.subcomponents[0]['sequence'] == 1
 
     save_event_override = save_event
     override_send_email(send_email)
@@ -456,8 +506,38 @@ def test_update_two_attendees(client):
     response = client.post(f'/1/event_4.ics/update', data={'csrf_token': client.csrf_token}, headers={'X-Admin': 'true'})
 
     assert response.status_code == 200
-    assert 'Event sent to: foo@bar.com, foo2@bar.com' in response.data.decode()
+    assert 'Event sent to: foo@bar.com, foo2@bar.com. SEQUENCE=1' in response.data.decode()
     assert emails == ['foo@bar.com', 'foo2@bar.com']
+    assert saved
+
+
+def test_update_increase_seq_number(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['foo14@bar.com']
+        assert 'Subject: event_14' in content
+        called = True
+
+    saved = False
+    def save_event(name: str, event):
+        nonlocal saved
+        saved= True
+
+        assert event.subcomponents[0]['sequence'] == 12
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'/1/event_14.ics/update', data={'csrf_token': client.csrf_token}, headers={'X-Admin': 'true'})
+
+    assert response.status_code == 200
+    assert 'Event sent to: foo14@bar.com. SEQUENCE=12' in response.data.decode()
+    assert called
+    assert saved
 
 def test_subscribe_no_csrf(client):
     response = client.post(f'/1/event_1.ics/subscribe', data='email=foo@bar.com&updates=on')

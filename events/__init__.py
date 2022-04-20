@@ -16,7 +16,7 @@ from flask import Flask, request, render_template, Response
 from .errors import *
 from .subscribe import send_event_email, subscribe_to_event, validate_email
 from .access import validate_token, generate_access_url
-from .utils import get_event_component
+from .utils import get_event_component, increase_event_seq_number
 from datetime import datetime, date, timedelta
 from tzlocal import get_localzone
 from flask import request, redirect
@@ -313,11 +313,16 @@ def send_event_update(collection: str, event_id: str):
     if not emails:
         notification = 'Event has no attendees'
     else:
+        if not matched_collection.read_only:
+            logging.info(f'Incrementing sequence id for event {event_id}')
+            increase_event_seq_number(event)
+            matched_collection.save_event(event_id, event)
+
         for e in emails:
             logging.info(f'Emailing event {event_id} to {e}')
             send_event_email(event, e, settings, matched_collection.default_organizer)
 
-        notification = 'Event sent to: ' + ', '.join(emails)
+        notification = 'Event sent to: ' + ', '.join(emails) + '. SEQUENCE=' + (str(component['sequence'] if 'sequence' in component else '[ABSENT]'))
 
     return render_event(collection, event_id, event, notification=notification, admin=True)
 
