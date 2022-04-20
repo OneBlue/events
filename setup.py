@@ -9,7 +9,7 @@ setup(
         "console_scripts": ["events = events:main"]
         },
     install_requires=[
-        'Flask==2.0.2',
+        'Flask==2.1.1',
         'Flask-WTF==0.15.1',
         'icalendar==4.0.1',
         'humanize==3.12.0',
