@@ -126,6 +126,14 @@ event_14['uid'] = 'event_14'
 event_14.add('attendee', 'MAILTO:foo14@bar.com')
 event_14['sequence'] = 11
 
+yearly_repeating_event = Event()
+yearly_repeating_event.add('rrule', {'FREQ': 'YEARLY'})
+yearly_repeating_event.add('dtstart', datetime(2013, 10, 10, 10, 0, 0))
+yearly_repeating_event.add('dtend', datetime(2013, 10, 10, 10, 0, 0))
+yearly_repeating_event['summary'] = 'yearly_repeating_event'
+yearly_repeating_event.add('created', datetime(2013, 10, 10, 10, 0, 0))
+yearly_repeating_event['uid'] = 'yearly_repeating_event'
+
 
 save_event_override = None
 
@@ -146,6 +154,7 @@ class CollectionMock(Collection):
                         'event_12': event_12,
                         'event_13': event_13,
                         'event_14': event_14,
+                        'yearly_repeating_event': yearly_repeating_event,
                         }
 
     def get_event_impl(self, name: str):
@@ -342,6 +351,24 @@ def test_search_api_strip(client):
     content = search_api(client, " event_1 ", exact=True)
     order = [e['title'] for e in content]
     assert order == ['event_1']
+
+def test_search_rrule_exact_match(client):
+    after = datetime.timestamp(yearly_repeating_event['dtend'].dt)
+    before = datetime.timestamp(yearly_repeating_event['dtstart'].dt)
+    content = search_api(client, "yearly_repeating_event", before=before, after=after)
+    assert [e['title'] for e in content] == ['yearly_repeating_event']
+
+def test_search_rrule_negative(client):
+    after = datetime.timestamp(yearly_repeating_event['dtend'].dt)
+    before = datetime.timestamp(yearly_repeating_event['dtstart'].dt - timedelta(hours=1))
+    content = search_api(client, "yearly_repeating_event", before=before, after=after)
+    assert content == []
+
+def test_search_rrule_occurence(client):
+    after = datetime.timestamp(yearly_repeating_event['dtend'].dt + timedelta(days=365))
+    before = datetime.timestamp(yearly_repeating_event['dtstart'].dt + timedelta(days=365))
+    content = search_api(client, "yearly_repeating_event", before=before, after=after)
+    assert [e['title'] for e in content] == ['yearly_repeating_event']
 
 def test_view_event_admin(client):
     response = client.get('/1/event_1.ics', headers={'X-Admin': 'true'})
