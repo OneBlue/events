@@ -390,19 +390,22 @@ def search_api(collection):
 
         # Special case for repeating events
         if 'rrule' in event:
-            if not 'dtstart' in event:
-                logging.warning(f'Event {event} has rrule but not dtstart')
+            if not 'dtstart' in event or not 'dtend' in event:
+                logging.warning(f'Event {event} has rrule but not dtstart or dtend')
                 return False # Invalid event, ignore
 
             rule = rrulestr(event['rrule'].to_ical().decode(), dtstart=rationalize_time(event['dtstart'].dt))
 
             begin = None
-            if 'dtstart' in event and before != inf:
-                begin =  rule.after(rationalize_time(datetime.fromtimestamp(before)), inc=True)
+            if before != inf:
+                begin = rule.before(rationalize_time(datetime.fromtimestamp(before)), inc=True)
+                if begin is None: # Taken if the event never occured before 'begin'
+                    return False
 
             end = None
-            if 'dtend' in event and after != 0:
-                end = rule.after(rationalize_time(datetime.fromtimestamp(after)), inc=True)
+            if after != 0:
+                duration = event['dtend'].dt - event['dtstart'].dt
+                end = (begin or rule.before(rationalize_time(datetime.fromtimestamp(after) - duration), inc=True)) + duration
         else:
             begin = None if not 'dtstart' in event else event['dtstart'].dt
             end = None if not 'dtend' in event else event['dtend'].dt

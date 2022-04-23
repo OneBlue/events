@@ -364,9 +364,29 @@ def test_search_rrule_negative(client):
     content = search_api(client, "yearly_repeating_event", before=before, after=after)
     assert content == []
 
+def test_search_rrule_after_only(client):
+    after = datetime.timestamp(yearly_repeating_event['dtend'].dt)
+    content = search_api(client, "yearly_repeating_event", after=after)
+    assert [e['title'] for e in content] == ['yearly_repeating_event']
+
+def test_search_rrule_before_only(client):
+    before = datetime.timestamp(yearly_repeating_event['dtstart'].dt + timedelta(hours=1))
+    content = search_api(client, "yearly_repeating_event", before=before)
+    assert [e['title'] for e in content] == ['yearly_repeating_event']
+
+def test_search_rrule_title_only(client):
+    content = search_api(client, "yearly_repeating_event")
+    assert [e['title'] for e in content] == ['yearly_repeating_event']
+
+def test_search_rrule_before_first_occurence(client):
+    after = datetime.timestamp(yearly_repeating_event['dtend'].dt - timedelta(days=365))
+    before = datetime.timestamp(yearly_repeating_event['dtstart'].dt - timedelta(days=365))
+    content = search_api(client, "yearly_repeating_event", before=before, after=after)
+    assert content == []
+
 def test_search_rrule_occurence(client):
-    after = datetime.timestamp(yearly_repeating_event['dtend'].dt + timedelta(days=365))
-    before = datetime.timestamp(yearly_repeating_event['dtstart'].dt + timedelta(days=365))
+    after = datetime.timestamp(yearly_repeating_event['dtend'].dt - timedelta(days=365))
+    before = datetime.timestamp(yearly_repeating_event['dtstart'].dt - timedelta(days=365))
     content = search_api(client, "yearly_repeating_event", before=before, after=after)
     assert [e['title'] for e in content] == ['yearly_repeating_event']
 
