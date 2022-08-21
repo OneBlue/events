@@ -18,6 +18,7 @@ from urllib.parse import quote_plus
 from flask_wtf.csrf import generate_csrf
 from flask import session, current_app, session
 from flask.testing import FlaskClient as BaseFlaskClient
+from requests.auth import HTTPBasicAuth
 
 
 os.environ['TZ'] = 'America/Los_Angeles'
@@ -124,6 +125,7 @@ event_14['summary'] = 'event_14'
 event_14.add('created', datetime(2013, 10, 10, 10, 0, 0))
 event_14['uid'] = 'event_14'
 event_14.add('attendee', 'MAILTO:foo14@bar.com')
+event_14.add('attendee', 'MAILTO:userid')
 event_14['sequence'] = 11
 
 yearly_repeating_event = Event()
@@ -138,8 +140,8 @@ yearly_repeating_event['uid'] = 'yearly_repeating_event'
 save_event_override = None
 
 class CollectionMock(Collection):
-    def __init__(self, read_only):
-        super().__init__(None, None, read_only=read_only, default_organizer=vCalAddress('MAILTO:default_organizer@foo.com'))
+    def __init__(self, auth, read_only):
+        super().__init__(None, auth, read_only=read_only, default_organizer=vCalAddress('MAILTO:default_organizer@foo.com'))
 
         self.content = {'event_1': event_1,
                         'event_2': event_2,
@@ -179,7 +181,7 @@ class CollectionMock(Collection):
         return self.content.values()
 
 class Config:
-    collections = {'1': CollectionMock(False), '2': CollectionMock(True)}
+    collections = {'1': CollectionMock(HTTPBasicAuth('userid', ''), False), '2': CollectionMock(None, True)}
     port = 1111
     host = '127.0.0.1'
     time_format = '%Y-%m-%d %H:%M:%S'
@@ -556,7 +558,6 @@ def test_update_two_attendees(client):
     assert 'Event sent to: foo@bar.com, foo2@bar.com. SEQUENCE=1' in response.data.decode()
     assert emails == ['foo@bar.com', 'foo2@bar.com']
     assert saved
-
 
 def test_update_increase_seq_number(client):
     global save_event_override

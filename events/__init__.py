@@ -12,14 +12,13 @@ import uuid
 import re
 from humanize import naturaldelta
 from icalendar import vCalAddress
-from flask import Flask, request, render_template, Response
+from flask import Flask, request, render_template, Response, redirect
 from .errors import *
 from .subscribe import send_event_email, subscribe_to_event, validate_email
 from .access import validate_token, generate_access_url
 from .utils import get_event_component, increase_event_seq_number
 from datetime import datetime, date, timedelta
 from tzlocal import get_localzone
-from flask import request, redirect
 from flask_wtf.csrf import CSRFProtect
 from urllib.parse import quote_plus, urlparse
 from dateutil.rrule import rrulestr
@@ -80,9 +79,9 @@ def validate_access(token: str = None):
 
     path = request.path
     if path.endswith('/ics'):
-       path = path[:-len('/ics')]
+        path = path[:-len('/ics')]
     elif path.endswith('/subscribe'):
-       path = path[:-len('/subscribe')]
+        path = path[:-len('/subscribe')]
 
     try:
         validate_access_impl(token, path)
@@ -310,6 +309,9 @@ def send_event_update(collection: str, event_id: str):
         emails = []
 
     emails = [e.replace('mailto:', '') for e in emails]
+
+    # Some CalDav client will add a 'user-id' in the attendee list, which might not be a valid email. Drop it to avoid issues
+    emails = [e for e in emails if e != matched_collection.user_id()]
     if not emails:
         notification = 'Event has no attendees'
     else:

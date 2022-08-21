@@ -1,5 +1,6 @@
 import icalendar
 import requests
+import requests.auth
 import logging
 from .errors import *
 from xml.etree import ElementTree
@@ -20,6 +21,12 @@ class Collection:
         self.uid_only = uid_only
         self.read_only = read_only
         self.default_organizer = default_organizer
+
+    def user_id(self) -> str:
+        if isinstance(self.auth, requests.auth.HTTPBasicAuth):
+            return self.auth.username
+        else:
+            return None
 
     def is_event_visible(self, event) -> bool:
         if event.name == 'VTODO':
