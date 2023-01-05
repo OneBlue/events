@@ -311,7 +311,7 @@ def send_event_update(collection: str, event_id: str):
     emails = [e.replace('mailto:', '') for e in emails]
 
     # Some CalDav client will add a 'user-id' in the attendee list, which might not be a valid email. Drop it to avoid issues
-    emails = [e for e in emails if e != matched_collection.user_id()]
+    emails = [e for e in emails if not matched_collection.is_excluded_email(e)]
     if not emails:
         notification = 'Event has no attendees'
     else:

@@ -14,13 +14,17 @@ def remove_ics(path: str) -> str:
         return path
 
 class Collection:
-    def __init__(self, url: str, auth, show_private=False, uid_only=False, read_only=False, default_organizer=None):
+    def __init__(self, url: str, auth, show_private=False, uid_only=False, read_only=False, default_organizer=None, excluded_emails=[]):
         self.url = url
         self.auth = auth
         self.show_private = show_private
         self.uid_only = uid_only
         self.read_only = read_only
         self.default_organizer = default_organizer
+        self.excluded_emails = excluded_emails
+
+    def is_excluded_email(self, email: str) -> bool:
+        return email == self.user_id() or email in self.excluded_emails
 
     def user_id(self) -> str:
         if isinstance(self.auth, requests.auth.HTTPBasicAuth):

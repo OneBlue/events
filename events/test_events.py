@@ -126,6 +126,7 @@ event_14.add('created', datetime(2013, 10, 10, 10, 0, 0))
 event_14['uid'] = 'event_14'
 event_14.add('attendee', 'MAILTO:foo14@bar.com')
 event_14.add('attendee', 'MAILTO:userid')
+event_14.add('attendee', 'MAILTO:excluded')
 event_14['sequence'] = 11
 
 yearly_repeating_event = Event()
@@ -141,7 +142,7 @@ save_event_override = None
 
 class CollectionMock(Collection):
     def __init__(self, auth, read_only):
-        super().__init__(None, auth, read_only=read_only, default_organizer=vCalAddress('MAILTO:default_organizer@foo.com'))
+        super().__init__(None, auth, read_only=read_only, default_organizer=vCalAddress('MAILTO:default_organizer@foo.com'), excluded_emails=['excluded'])
 
         self.content = {'event_1': event_1,
                         'event_2': event_2,
@@ -565,6 +566,7 @@ def test_update_increase_seq_number(client):
     called = False
     def send_email(source: str, destination: list, content: str):
         nonlocal called
+        assert not called
         assert source == settings.email_from
         assert destination == ['foo14@bar.com']
         assert 'Subject: event_14' in content
@@ -573,7 +575,7 @@ def test_update_increase_seq_number(client):
     saved = False
     def save_event(name: str, event):
         nonlocal saved
-        saved= True
+        saved = True
 
         assert event.subcomponents[0]['sequence'] == 12
 
