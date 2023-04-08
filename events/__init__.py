@@ -358,7 +358,14 @@ def subscribe_api(collection, event_id):
     except InvalidEmailAddress as e:
         return e.message, 400
 
-    return '', 200
+    # Refresh event to include changes before returning it
+
+    try:
+        event = matched_collection.get_event(event_id)
+    except NotFoundException as e:
+        raise RuntimeError(f'Event {event_id} was not found after updating it')
+
+    return json.dumps(event_json(collection, event)), 200
 
 @app.route('/api/<collection>/<event_id>', methods=['GET'])
 def event_api(collection, event_id):

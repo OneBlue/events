@@ -891,6 +891,15 @@ def test_subscribe_api_admin(client):
     assert called
     assert save_called
 
+    content = json.loads(response.data)
+
+    assert content['access_link'].startswith('http://')
+    assert content['attendees'] == ['foo5@bar.com']
+    assert content['description'] == None
+    assert content['start'] == '2012-10-10 10:00:00'
+    assert content['end'] == None
+    assert content['location'] == None
+
 def test_subscribe_api_admin_no_updates(client):
     global save_event_override
 
