@@ -179,6 +179,8 @@ def event_json(collection: int, event) -> dict:
         ts = rationalize_time(event['dtstart'].dt)
         content['access_link'] = generate_access_url(settings, f'/{collection}/{event["uid"]}', ts + timedelta(days=7))
 
+    content['sequence'] = event['sequence'] if 'sequence' in event else None
+
     return content
 
 def make_event_list(events: list, sort_field: str, title: str, max_count: int, allow_nulls=False, reverse=True):
@@ -293,8 +295,8 @@ def subscribe(collection, event_id):
     except InvalidEmailAddress as e:
         return render_event(collection, event_id, event, notification= f'Invalid email: {str(e)}', token=token, admin=not token and settings.is_admin(request))
 
-@app.route('/<collection>/<event_id>/update', methods=['POST'])
-def send_event_update(collection: str, event_id: str):
+
+def send_event_update_impl(collection: str, event_id: str):
     admin_only()
 
     event, matched_collection = get_event(collection, event_id)
@@ -313,7 +315,7 @@ def send_event_update(collection: str, event_id: str):
     # Some CalDav client will add a 'user-id' in the attendee list, which might not be a valid email. Drop it to avoid issues
     emails = [e for e in emails if not matched_collection.is_excluded_email(e)]
     if not emails:
-        notification = 'Event has no attendees'
+        return 'Event has no attendees', event
     else:
         if not matched_collection.read_only:
             logging.info(f'Incrementing sequence id for event {event_id}')
@@ -324,9 +326,21 @@ def send_event_update(collection: str, event_id: str):
             logging.info(f'Emailing event {event_id} to {e}')
             send_event_email(event, e, settings, matched_collection.default_organizer)
 
-        notification = 'Event sent to: ' + ', '.join(emails) + '. SEQUENCE=' + (str(component['sequence'] if 'sequence' in component else '[ABSENT]'))
+        return 'Event sent to: ' + ', '.join(emails) + '. SEQUENCE=' + (str(component['sequence'] if 'sequence' in component else '[ABSENT]')), event
 
+
+@app.route('/<collection>/<event_id>/update', methods=['POST'])
+def send_event_update(collection: str, event_id: str):
+    notification, event = send_event_update_impl(collection, event_id)
     return render_event(collection, event_id, event, notification=notification, admin=True)
+
+@app.route('/api/<collection>/<event_id>/update', methods=['POST'])
+@csrf.exempt
+def update_api(collection, event_id):
+    _, event = send_event_update_impl(collection, event_id)
+
+    return json.dumps(event_json(collection, event)), 200
+
 
 @app.route('/api/<collection>/<event_id>/subscribe', methods=['POST'])
 @csrf.exempt

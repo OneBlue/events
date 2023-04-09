@@ -302,7 +302,7 @@ def test_search_api_one_match(client):
     content = search_api(client, 'event_2')
     del content[0]['access_link']
 
-    assert content == json.loads('[{"attendees": null,  "description": null,  "end": null,  "location": "location_2",  "start": "2011-10-10 10:00:00",  "start_ts": 1318266000.0,  "title": "event_2"}]')
+    assert content == json.loads('[{"attendees": null,  "description": null,  "end": null,  "location": "location_2",  "sequence": null, "start": "2011-10-10 10:00:00",  "start_ts": 1318266000.0,  "title": "event_2"}]')
 
 def test_search_api_no_match(client):
     assert search_api(client, 'nomatch') == []
@@ -589,6 +589,51 @@ def test_update_increase_seq_number(client):
     assert called
     assert saved
 
+def test_update_api_no_admin(client):
+    response = client.post(f'/api/1/event_1.ics/update')
+    assert response.status_code == 404
+
+def test_update_api_admin_not_found(client):
+    response = client.post(f'/api/1/not-found/update', headers={'X-Admin': 'true'})
+    assert response.status_code == 404
+
+def test_update_api_increase_seq_number_with_email(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert not called
+        assert source == settings.email_from
+        assert destination == ['foo14@bar.com']
+        assert 'Subject: event_14' in content
+        called = True
+
+    saved = False
+    def save_event(name: str, event):
+        nonlocal saved
+        saved = True
+
+        assert event.subcomponents[0]['sequence'] == 13
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'/api/1/event_14.ics/update', headers={'X-Admin': 'true'})
+
+    assert response.status_code == 200
+    assert called
+    assert saved
+
+    content = json.loads(response.data)
+
+    assert content['title'] == 'event_14'
+    assert content['start'] == '2013-10-10 10:00:00'
+    assert content['end'] == None
+    assert content['attendees'] == ['foo14@bar.com', 'userid', 'excluded']
+    assert content['sequence'] == 13
+
+
 def test_subscribe_no_csrf(client):
     response = client.post(f'/1/event_1.ics/subscribe', data='email=foo@bar.com&updates=on')
 
@@ -608,7 +653,7 @@ def test_subscribe_with_csrf_and_token(client):
         nonlocal called
         assert source == settings.email_from
         assert destination == ['foo@bar.com']
-        assert 'Subject: Event_1' in content
+        assert 'Subject: event_1' in content
         called = True
 
     def save_event(*args):
@@ -624,7 +669,7 @@ def test_subscribe_with_csrf_and_token(client):
     assert response.status_code == 200
     assert called
 
-def test_subscribe_with_csrf_and_token(client):
+def test_subscribe_with_csrf_and_token_and_updates(client):
     global save_event_override
 
     called = False
@@ -964,7 +1009,7 @@ def test_event_api_admin(client):
 
     content = json.loads(response.data)
     del content['access_link']
-    assert json.dumps(content) == '{"title": "event_5", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo5@bar.com"], "end": null, "description": null, "location": null}'
+    assert json.dumps(content) == '{"title": "event_5", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo5@bar.com"], "end": null, "description": null, "location": null, "sequence": null}'
 
 
 def test_event_api_admin_with_location(client):
@@ -973,7 +1018,7 @@ def test_event_api_admin_with_location(client):
 
     content = json.loads(response.data)
     del content['access_link']
-    assert json.dumps(content) == '{"title": "event_1", "start": "2010-10-10 10:00:00", "start_ts": 1286730000.0, "end": "2010-10-10 11:00:00", "end_ts": 1286733600.0, "location": "Location_1", "attendees": ["foo@bar.com"], "description": null}'
+    assert json.dumps(content) == '{"title": "event_1", "start": "2010-10-10 10:00:00", "start_ts": 1286730000.0, "end": "2010-10-10 11:00:00", "end_ts": 1286733600.0, "location": "Location_1", "attendees": ["foo@bar.com"], "description": null, "sequence": null}'
 
 def test_event_api_admin_without_ics(client):
     response = client.get(f'api/1/event_4', headers={'X-Admin': 'true'})
@@ -981,7 +1026,7 @@ def test_event_api_admin_without_ics(client):
 
     content = json.loads(response.data)
     del content['access_link']
-    assert json.dumps(content) == '{"title": "event_4", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo@bar.com", "foo2@bar.com", "foo3@bar.com"], "end": null, "description": null, "location": null}'
+    assert json.dumps(content) == '{"title": "event_4", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo@bar.com", "foo2@bar.com", "foo3@bar.com"], "end": null, "description": null, "location": null, "sequence": 1}'
 
 def test_event_api_admin_with_end(client):
     response = client.get(f'api/1/event_10', headers={'X-Admin': 'true'})
@@ -990,7 +1035,7 @@ def test_event_api_admin_with_end(client):
     content = json.loads(response.data)
     del content['access_link']
 
-    assert json.dumps(content) == '{"title": "event_10", "start": "2012-10-10 00:00:00", "start_ts": 1349852400.0, "end": "2012-10-10 10:00:00", "end_ts": 1349888400.0, "description": null, "location": null, "attendees": null}'
+    assert json.dumps(content) == '{"title": "event_10", "start": "2012-10-10 00:00:00", "start_ts": 1349852400.0, "end": "2012-10-10 10:00:00", "end_ts": 1349888400.0, "description": null, "location": null, "attendees": null, "sequence": null}'
 
 def test_create_event_without_admin(client):
     response = client.post(f'api/1', data='')
