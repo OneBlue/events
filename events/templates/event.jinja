@@ -32,11 +32,15 @@
             return
         }
 
-        start_date = localizeDate({{ start_ts }}) + " (<b>" + tz + "</b>)"
-        end_date = localizeDate({{ end_ts }}) + " (<b>" + tz + "</b>)"
+        {% for e in events %}
 
-        document.getElementById('start-date').innerHTML += " (<b>" + server_tz + "</b>) | " + start_date
-        document.getElementById('end-date').innerHTML += " (<b>" + server_tz + "</b>) | " + end_date
+        start_date = localizeDate({{ e.start_ts }}) + " (<b>" + tz + "</b>)"
+        end_date = localizeDate({{ e.end_ts }}) + " (<b>" + tz + "</b>)"
+
+        document.getElementById('start-date-{{ loop.index }}').innerHTML += " (<b>" + server_tz + "</b>) | " + start_date
+        document.getElementById('end-date-{{ loop.index }}').innerHTML += " (<b>" + server_tz + "</b>) | " + end_date
+
+       {% endfor %}
     }
 
     function onLoad()
@@ -47,51 +51,60 @@
 
   </script>
   </head>
-
-   <style>
-      table, th, td {
-      border:1px solid black;
-      }
-   </style>
-
    <body onLoad="onLoad()">
+     <style>
+        table, th, td {
+        border:1px solid black;
+        }
+     </style>
+
       <h2>Calendar entry</h2>
+
+
+{% for e in events %}
+
       <table style="width:100%">
          <tr>
-            <th colspan="2"> {{ title }} </th>
+            <th colspan="2"> {{ e.title }} </th>
          </tr>
-{% if start is defined %}
+
+{% if e.start is defined %}
          <tr>
            <th style="background-color:#808080"> Start </th>
-           <td id="start-date">{{ start }}</td>
+           <td id="start-date-{{ loop.index }}">{{ e.start }}</td>
          </tr>
 {% endif %}
-{% if end is defined %}
+{% if e.end is defined %}
          <tr>
             <th style="background-color:#808080"> End </th>
-            <td id="end-date">{{ end }}</td>
+            <td id="end-date-{{ loop.index }}">{{ e.end }}</td>
          </tr>
 {% endif %}
-{% if location is defined %}
+{% if e.location is defined %}
          <tr>
             <th style="background-color:#808080"> Location </th>
-            <td>{{ location }}</td>
+            <td>{{ e.location }}</td>
          </tr>
 {% endif %}
-{% if description is defined %}
+{% if e.description is defined %}
          <tr>
             <th style="background-color:#808080"> Description </th>
-            <td style="white-space:pre-wrap; word-wrap:break-word">{{ description }}</td>
+            <td style="white-space:pre-wrap; word-wrap:break-word">{{ e.description }}</td>
          </tr>
 {% endif %}
-{% if attendees is defined %}
+{% if e.attendees is defined %}
          <tr>
             <th style="background-color:#808080"> Attendees </th>
-            <td>{{ attendees|join(', ') }}</td>
+            <td>{{ e.attendees|join(', ') }}</td>
          </tr>
 {% endif %}
 
+
       </table>
+      <br/>
+
+{% endfor %}
+
       <form name="form" action="/{{ collection }}/{{ event }}/subscribe" method="post" style="display: inline;">
          <input type="email" id="email" name="email" required="required" placeholder="email address">
          <input type="checkbox" id="updates" name="updates" checked>

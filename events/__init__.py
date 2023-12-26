@@ -16,7 +16,7 @@ from flask import Flask, request, render_template, Response, redirect
 from .errors import *
 from .subscribe import send_event_email, subscribe_to_event, validate_email
 from .access import validate_token, generate_access_url
-from .utils import get_event_component, increase_event_seq_number
+from .utils import get_event_component, increase_event_seq_number, get_event_components
 from datetime import datetime, date, timedelta
 from tzlocal import get_localzone
 from flask_wtf.csrf import CSRFProtect
@@ -100,9 +100,7 @@ def validate_access_impl(token: str, path: str):
     except Exception as e:
         raise InvalidToken() from e
 
-def get_event_fields(event):
-    component = get_event_component(event)
-
+def get_event_fields(component):
     event = {'title': str(component['summary'])}
 
     if 'dtstart' in component:
@@ -122,7 +120,7 @@ def get_event_fields(event):
         event['end_ts'] = end.timestamp()
 
     if 'description' in component :
-        event['description'] = str(component['description'])
+        event['description'] = re.sub(GCALENDAR_FILTER, '[GCAL content filtered]', str(component['description']), flags=re.DOTALL)
 
     if 'location' in component:
         event['location'] = str(component['location'])
@@ -137,9 +135,10 @@ def get_event_fields(event):
     return event
 
 def render_event(collection_id, event_id, event_data, **extra_fields):
-    event = get_event_component(event_data)
+    events = get_event_components(event_data)
 
-    fields = get_event_fields(event_data)
+    fields = {}
+    fields['events'] = [get_event_fields(e) for e in events]
     fields['collection'] = collection_id
     fields['event'] = event_id
     fields['server_timezone'] = settings.timezone.zone
@@ -154,13 +153,9 @@ def render_event(collection_id, event_id, event_data, **extra_fields):
                                 {'title': '30 days link', 'url': generate_access_url(settings, request.path, datetime.now() + timedelta(days=30))},
                                 ]
 
-        if 'dtstart' in event:
-            ts = rationalize_time(event['dtstart'].dt)
+        if 'dtstart' in events[0]:
+            ts = rationalize_time(events[0]['dtstart'].dt)
             fields['admin_links'].append({'title': 'Event date + 1 week link', 'url': generate_access_url(settings, request.path, ts + timedelta(days=7))})
-
-
-    if 'description' in fields:
-        fields['description'] = re.sub(GCALENDAR_FILTER, '[GCAL content filtered]', fields['description'], flags=re.DOTALL)
 
     return render_template('event.jinja', **fields)
 

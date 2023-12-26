@@ -1,8 +1,11 @@
-def get_event_component(event):
+def get_event_components(event) -> list:
     if 'summary' in event:
-        return event
+        return [event]
 
-    components = [e for e in event.subcomponents if e.name == 'VEVENT']
+    return [e for e in event.subcomponents if e.name == 'VEVENT']
+
+def get_event_component(event):
+    components = get_event_components(event)
 
     if not components:
         raise RuntimeError(f'Not valid components found in event: {event}')

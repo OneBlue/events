@@ -14,6 +14,7 @@ from .errors import *
 from . import create_app
 from .subscribe import override_send_email, send_event_email, subscribe_to_event
 from icalendar import Calendar, Event, vCalAddress
+from icalendar.cal import Component
 from urllib.parse import quote_plus
 from flask_wtf.csrf import generate_csrf
 from flask import session, current_app, session
@@ -128,6 +129,7 @@ event_14.add('attendee', 'MAILTO:foo14@bar.com')
 event_14.add('attendee', 'MAILTO:userid')
 event_14.add('attendee', 'MAILTO:excluded')
 event_14['sequence'] = 11
+event_14.name = 'VEVENT'
 
 yearly_repeating_event = Event()
 yearly_repeating_event.add('rrule', {'FREQ': 'YEARLY'})
@@ -136,6 +138,11 @@ yearly_repeating_event.add('dtend', datetime(2013, 10, 10, 10, 0, 0))
 yearly_repeating_event['summary'] = 'yearly_repeating_event'
 yearly_repeating_event.add('created', datetime(2013, 10, 10, 10, 0, 0))
 yearly_repeating_event['uid'] = 'yearly_repeating_event'
+yearly_repeating_event.name = 'VEVENT'
+
+multiple_events = Calendar()
+multiple_events.add_component(yearly_repeating_event)
+multiple_events.add_component(event_14)
 
 
 save_event_override = None
@@ -158,6 +165,7 @@ class CollectionMock(Collection):
                         'event_13': event_13,
                         'event_14': event_14,
                         'yearly_repeating_event': yearly_repeating_event,
+                        'multiple': multiple_events,
                         }
 
     def get_event_impl(self, name: str):
@@ -166,6 +174,9 @@ class CollectionMock(Collection):
 
         if not event:
             raise NotFoundException(f'Event {name} not found')
+
+        if event.name == 'VCALENDAR':
+            return event
 
         calendar = Calendar()
         calendar.add_component(event)
@@ -179,7 +190,7 @@ class CollectionMock(Collection):
             return save_event_override(name, event)
 
     def all_events(self):
-        return self.content.values()
+        return [e for e in self.content.values() if 'summary' in e]
 
 class Config:
     collections = {'1': CollectionMock(HTTPBasicAuth('userid', ''), False), '2': CollectionMock(None, True)}
@@ -1186,3 +1197,13 @@ def test_view_event_gmail_filter_ics(client):
     assert 'event_8' in response.data.decode()
     assert 'gcal' in response.data.decode()
 
+
+
+def test_event_multiple_components(client):
+    token = quote_plus(generate_token(settings, '/1/multiple.ics', expires=datetime.now() + timedelta(days=1)))
+    response = client.get(f'/1/multiple.ics?t={token}')
+
+    assert response.status_code == 200
+    assert 'Admin' not in response.data.decode()
+    assert 'event_14' in response.data.decode()
+    assert 'yearly' in response.data.decode()
