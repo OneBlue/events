@@ -16,6 +16,7 @@ setup(
         'pytest==6.2.5',
         'tzlocal==2.1',
         'ecdsa==0.16.1',
-        'requests>=2.24.0'
+        'requests>=2.24.0',
+        'Werkzeug==2.0.2'
         ]
     )
