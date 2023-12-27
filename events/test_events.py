@@ -404,6 +404,8 @@ def test_search_rrule_occurence(client):
     content = search_api(client, "yearly_repeating_event", before=before, after=after)
     assert [e['title'] for e in content] == ['yearly_repeating_event']
 
+
+
 def test_view_event_admin(client):
     response = client.get('/1/event_1.ics', headers={'X-Admin': 'true'})
 
@@ -1207,3 +1209,12 @@ def test_event_multiple_components(client):
     assert 'Admin' not in response.data.decode()
     assert 'event_14' in response.data.decode()
     assert 'yearly' in response.data.decode()
+
+
+def test_rrule_in_body(client):
+    token = quote_plus(generate_token(settings, '/1/yearly_repeating_event.ics', expires=datetime.now() + timedelta(days=1)))
+    response = client.get(f'/1/yearly_repeating_event.ics?t={token}')
+
+    assert response.status_code == 200
+    assert 'yearly' in response.data.decode()
+    assert "vRecur({'FREQ': 'YEARLY'})" in response.data.decode()

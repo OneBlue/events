@@ -125,6 +125,9 @@ def get_event_fields(component):
     if 'location' in component:
         event['location'] = str(component['location'])
 
+    if 'rrule' in component:
+        event['repeat'] = str(component['rrule'])
+
     attendees = component.get('attendee')
     if attendees:
         if isinstance(attendees, vCalAddress):

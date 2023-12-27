@@ -80,6 +80,14 @@
             <td id="end-date-{{ loop.index }}">{{ e.end }}</td>
          </tr>
 {% endif %}
+
+{% if e.repeat is defined %}
+         <tr>
+            <th style="background-color:#808080"> Repeat </th>
+            <td >{{ e.repeat }}</td>
+         </tr>
+{% endif %}
+
 {% if e.location is defined %}
          <tr>
             <th style="background-color:#808080"> Location </th>
