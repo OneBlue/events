@@ -441,14 +441,14 @@ def test_view_event_ics(client):
     token = quote_plus(generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1)))
     response = client.get(f'/1/event_1.ics/ics?t={token}')
     assert response.status_code == 200
-    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nDTEND;VALUE=DATE-TIME:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART:20101010T100000\r\nDTEND:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
 def test_view_event_ics_old_token(client):
     token = quote_plus(generate_token(settings, '/1/event_1.ics', expires=datetime.now() + timedelta(days=1)))
     response = client.get(f'/1/event_1/ics?t={token}')
 
     assert response.status_code == 200
-    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nDTEND;VALUE=DATE-TIME:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART:20101010T100000\r\nDTEND:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
 
 def test_view_event_ics_new_token(client):
@@ -456,7 +456,7 @@ def test_view_event_ics_new_token(client):
     response = client.get(f'/1/event_1/ics?t={token}')
 
     assert response.status_code == 200
-    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nDTEND;VALUE=DATE-TIME:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART:20101010T100000\r\nDTEND:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
 def test_view_event_ics_no_token(client):
     response = client.get(f'/1/event_1.ics/ics')
@@ -467,7 +467,7 @@ def test_view_event_ics_admin(client):
     response = client.get(f'/1/event_1.ics/ics', headers={'X-Admin': 'true'})
 
     assert response.status_code == 200
-    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART;VALUE=DATE-TIME:20101010T100000\r\nDTEND;VALUE=DATE-TIME:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    assert response.data.decode() == 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nSUMMARY:event_1\r\nDTSTART:20101010T100000\r\nDTEND:20101010T110000\r\nUID:event_1\r\nLOCATION:Location_1\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
 
 def test_update_no_csrf(client):
     response = client.post(f'/1/event_1.ics/update', data='')
