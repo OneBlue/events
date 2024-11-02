@@ -39,14 +39,32 @@ def get_collection(collection: str):
 
     return matched_collection
 
-def get_event(collection: str, event: str):
+def get_event(collection: str, event: str, follow_redirect=False):
     matched_collection = get_collection(collection)
 
-    matched_event = matched_collection.get_event(event)
+    filename = event
+
+    try:
+        matched_event = matched_collection.get_event(event)
+    except EventRedirect as redirect:
+        if not follow_redirect:
+            raise
+
+        logging.warning(f'Following event redirect to: {redirect.filename}')
+        matched_event = matched_collection.get_event(redirect.filename)
+        filename = redirect.filename # Record the new filename if redirected
+
     if not matched_event:
         raise NotFoundException(f'Event {event} not found in collection {collection}')
 
-    return matched_event, matched_collection
+    return matched_event, matched_collection, filename
+
+def get_event_uid(event) -> str:
+    if len(event.subcomponents) == 1:
+        return event.subcomponents[0].get('uid')
+    else:
+        logging.warning(f'Found event with more than one subcomponent: {event}')
+        return None
 
 def rationalize_time(ts) -> datetime:
     if not isinstance(ts, datetime): # In case of date, convert to datetime (set 00:00)
@@ -244,7 +262,7 @@ def event_page(collection, event):
     validate_access()
 
     try:
-        event_data, _ = get_event(collection, event)
+        event_data, _, _ = get_event(collection, event)
     except EventRedirect as e:
         logging.info(f'Redirecting event {event} to {e.filename}')
         assert event.lower() != e.filename.lower()
@@ -257,7 +275,7 @@ def subscribe(collection, event_id):
     token = request.form.get('t', None)
     validate_access(token)
 
-    event, matched_collection = get_event(collection, event_id)
+    event, matched_collection, _ = get_event(collection, event_id)
     if not event:
         raise NotFoundException(f'Event {event_id} not found in collection {collection}')
 
@@ -297,7 +315,7 @@ def subscribe(collection, event_id):
 def send_event_update_impl(collection: str, event_id: str):
     admin_only()
 
-    event, matched_collection = get_event(collection, event_id)
+    event, matched_collection, event_id = get_event(collection, event_id, follow_redirect=True)
     component = get_event_component(event)
 
     attendees = component.get('attendee', None)
@@ -345,7 +363,7 @@ def update_api(collection, event_id):
 def subscribe_api(collection, event_id):
     admin_only()
 
-    event, matched_collection = get_event(collection, event_id)
+    event, matched_collection, event_id = get_event(collection, event_id, follow_redirect=True)
     if not event:
         raise NotFoundException(f'Event {event_id} not found in collection {collection}')
 
@@ -383,7 +401,7 @@ def subscribe_api(collection, event_id):
 def event_api(collection, event_id):
     admin_only()
 
-    event, matched_collection = get_event(collection, event_id)
+    event, matched_collection, _ = get_event(collection, event_id, follow_redirect=True)
 
     return json.dumps(event_json(collection, event)), 200
 
@@ -515,8 +533,8 @@ def create_api(collection):
 def event_ics(collection, event):
     validate_access()
 
-    content = get_event(collection, event)[0].to_ical()
-    response = Response(content)
+    content, _, _ = get_event(collection, event, follow_redirect=True)
+    response = Response(content.to_ical())
     response.headers['Content-Disposition'] = f'Attachement; filename="{event}"'
     response.headers['Content-Type'] = f'content-type:text/calendar'
 

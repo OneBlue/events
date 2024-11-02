@@ -144,6 +144,8 @@ multiple_events = Calendar()
 multiple_events.add_component(yearly_repeating_event)
 multiple_events.add_component(event_14)
 
+redirect_map = {'redirect-uid': 'event_5.ics', 'redirect-uid-14': 'event_14.ics'}
+
 
 save_event_override = None
 
@@ -168,12 +170,18 @@ class CollectionMock(Collection):
                         'multiple': multiple_events,
                         }
 
-    def get_event_impl(self, name: str):
+    def lookup_event_by_uid(self, uid: str):
+        entry = redirect_map.get(uid, None)
+        if entry is not None:
+            return entry
+        else:
+            raise NotFoundException(f'event with UID: {uid} not found')
 
+    def get_event_impl(self, name: str):
         event = self.content.get(remove_ics(name))
 
         if not event:
-            raise NotFoundException(f'Event {name} not found')
+            return None
 
         if event.name == 'VCALENDAR':
             return event
@@ -321,7 +329,6 @@ def test_search_api_no_match(client):
 def test_search_api_multiple_match_sorted(client):
     content = search_api(client, "event_1")
     order = [e['title'] for e in content]
-
     assert order == ['event_12', 'event_11', 'event_13', 'event_14', 'event_10', 'event_1']
 
 def test_search_api_exact(client):
@@ -646,6 +653,43 @@ def test_update_api_increase_seq_number_with_email(client):
     assert content['attendees'] == ['foo14@bar.com', 'userid', 'excluded']
     assert content['sequence'] == 13
 
+def test_update_api_redirect(client):
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert not called
+        assert source == settings.email_from
+        assert destination == ['foo14@bar.com']
+        assert 'Subject: event_14' in content
+        called = True
+
+    saved = False
+    def save_event(name: str, event):
+        nonlocal saved
+        saved = True
+
+        assert event.subcomponents[0]['sequence'] == 14
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post(f'/api/1/redirect-uid-14/update', headers={'X-Admin': 'true'})
+
+    assert response.status_code == 200
+    assert called
+    assert saved
+
+    content = json.loads(response.data)
+
+    assert content['title'] == 'event_14'
+    assert content['start'] == '2013-10-10 10:00:00'
+    assert content['end'] == None
+    assert content['attendees'] == ['foo14@bar.com', 'userid', 'excluded']
+    assert content['sequence'] == 14
+
+
 
 def test_subscribe_no_csrf(client):
     response = client.post(f'/1/event_1.ics/subscribe', data='email=foo@bar.com&updates=on')
@@ -958,6 +1002,44 @@ def test_subscribe_api_admin(client):
     assert content['end'] == None
     assert content['location'] == None
 
+def test_subscribe_api_redirect(client): # Note: This test case depends on test_subscribe_api_admin
+    global save_event_override
+
+    called = False
+    def send_email(source: str, destination: list, content: str):
+        nonlocal called
+        assert source == settings.email_from
+        assert destination == ['redirected@bar.com']
+        assert 'Subject: event_5' in content
+        called = True
+
+    save_called = False
+    def save_event(name: str, event):
+        nonlocal save_called
+
+        assert name == 'event_5.ics'
+
+        assert event.subcomponents[0]['attendee'][1].title() == 'Mailto:Redirected@Bar.Com'
+        save_called = True
+
+    save_event_override = save_event
+    override_send_email(send_email)
+
+    response = client.post('api/1/redirect-uid/subscribe', data=json.dumps({'updates': True, 'email': 'redirected@bar.com'}), headers={'X-Admin': 'true'}, content_type='application/json')
+    assert response.status_code == 200
+    assert called
+    assert save_called
+
+    content = json.loads(response.data)
+
+    assert content['access_link'].startswith('http://')
+    assert content['attendees'] == ['foo5@bar.com', 'redirected@bar.com']
+    assert content['description'] == None
+    assert content['start'] == '2012-10-10 10:00:00'
+    assert content['end'] == None
+    assert content['location'] == None
+
+
 def test_subscribe_api_admin_no_updates(client):
     global save_event_override
 
@@ -1022,7 +1104,7 @@ def test_event_api_admin(client):
 
     content = json.loads(response.data)
     del content['access_link']
-    assert json.dumps(content) == '{"title": "event_5", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo5@bar.com"], "end": null, "description": null, "location": null, "sequence": null}'
+    assert json.dumps(content) == '{"title": "event_5", "start": "2012-10-10 10:00:00", "start_ts": 1349888400.0, "attendees": ["foo5@bar.com", "redirected@bar.com"], "end": null, "description": null, "location": null, "sequence": null}'
 
 
 def test_event_api_admin_with_location(client):
