@@ -93,27 +93,27 @@ class Collection:
         return event
 
     def lookup_event_by_uid(self, uid: str):
-        session = requests.Session()
-        session.auth = self.auth
+        with requests.Session() as session:
+            session.auth = self.auth
 
-        query = f'''
-        <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-            <D:prop>
-              <D:getetag/>
-            </D:prop>
-            <C:filter>
-              <C:comp-filter name="VCALENDAR">
-                <C:comp-filter name="VEVENT">
-                  <C:prop-filter name="UID">
-                    <C:text-match>{escape(uid)}</C:text-match>
-                  </C:prop-filter>
-                </C:comp-filter>
-              </C:comp-filter>
-            </C:filter>
-            </C:calendar-query>'''
+            query = f'''
+            <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+                <D:prop>
+                  <D:getetag/>
+                </D:prop>
+                <C:filter>
+                  <C:comp-filter name="VCALENDAR">
+                    <C:comp-filter name="VEVENT">
+                      <C:prop-filter name="UID">
+                        <C:text-match>{escape(uid)}</C:text-match>
+                      </C:prop-filter>
+                    </C:comp-filter>
+                  </C:comp-filter>
+                </C:filter>
+                </C:calendar-query>'''
 
-        response = session.request(url=self.url, method='REPORT', data=query)
-        response.raise_for_status()
+            response = session.request(url=self.url, method='REPORT', data=query)
+            response.raise_for_status()
 
         tree = ElementTree.fromstring(response.text)
 
