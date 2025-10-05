@@ -50,6 +50,9 @@ class Collection:
 
 
     def get_event_impl(self, name: str):
+        if '/' in name or '<' in name or '>' in name or '"' in name or "'" in name or '?' in name or '&' in name:
+            raise SuspiciousRequest('Suspicous event name: ' + name)
+
         response = requests.get(self.url + name, auth=self.auth)
         if response.status_code == 404:
             return None
@@ -60,9 +63,6 @@ class Collection:
 
 
     def get_event(self, name: str):
-        if '/' in name or '<' in name or '>' in name or '"' in name or "'" in name:
-            raise SuspiciousRequest('Suspicous event name: ' + name)
-
         if self.uid_only:
             # Special case for calendar providers that don't support individual event queries
             matched_events = [e for e in self.all_events() if e.get('uid') == name]

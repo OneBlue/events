@@ -418,6 +418,7 @@ def search_api(collection):
     before = body.get('before', inf)
     after = body.get('after', 0)
     exact = body.get('exact', False)
+    hint = body.get('hint', None)
 
     matched_collection = get_collection(collection)
 
@@ -459,8 +460,20 @@ def search_api(collection):
 
         return True
 
+    matched_events = []
 
-    matched_events = [e for e in matched_collection.all_events() if match(e)]
+    if hint is not None:
+        # If the client passed a valid hint, search for an easy match first
+        hinted_event = matched_collection.get_event(hint)
+        if hinted_event:
+            hinted_event = get_event_component(hinted_event)
+            if match(hinted_event): # Event found and matches predicate. Return immediately
+                matched_events = [hinted_event]
+            else:
+                logging.warning(f"Caller hinted with event: {hint}, but didn't match search predicate")
+
+    if not matched_events:
+        matched_events = [e for e in matched_collection.all_events() if match(e)]
 
     def compare_events(left, right):
         def cmp(field: str) -> bool:
