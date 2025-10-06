@@ -16,7 +16,7 @@ from flask import Flask, request, render_template, Response, redirect
 from .errors import *
 from .subscribe import send_event_email, subscribe_to_event, validate_email
 from .access import validate_token, generate_access_url
-from .utils import get_event_component, increase_event_seq_number, get_event_components
+from .utils import get_event_component, increase_event_seq_number, get_event_components, expect_type
 from datetime import datetime, date, timedelta
 from tzlocal import get_localzone
 from flask_wtf.csrf import CSRFProtect
@@ -414,11 +414,22 @@ def search_api(collection):
     if body is None:
         raise HTTPException(400, 'Invalid request: empty body')
 
-    search_term = body.get('pattern', '').strip()
+    search_term = body.get('pattern', '')
+    expect_type(search_term, [str], 'pattern')
+
+    search_term = search_term.strip()
+
     before = body.get('before', inf)
+    expect_type(before, [int, float], 'before', allow_none=True)
+
     after = body.get('after', 0)
+    expect_type(after, [int, float], 'after', allow_none=True)
+
     exact = body.get('exact', False)
+    expect_type(exact, [bool], 'exact')
+
     hint = body.get('hint', None)
+    expect_type(hint, [str], 'hint', allow_none=True)
 
     matched_collection = get_collection(collection)
 

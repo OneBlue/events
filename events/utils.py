@@ -1,3 +1,5 @@
+from .errors import SuspiciousRequest
+
 def get_event_components(event) -> list:
     if 'summary' in event:
         return [event]
@@ -25,3 +27,10 @@ def increase_event_seq_number(event):
 
     component['sequence'] = sequence
     return event
+
+def expect_type(value, types, name: str, allow_none=False):
+    if value is None and allow_none:
+        return
+
+    if not any(isinstance(value, e) for e in types):
+        raise SuspiciousRequest(f"Unexpected type for '{name}': {type(value).__name__}")

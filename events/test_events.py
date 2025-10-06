@@ -146,6 +146,13 @@ multiple_events.add_component(event_14)
 
 redirect_map = {'redirect-uid': 'event_5.ics', 'redirect-uid-14': 'event_14.ics'}
 
+uid_only_event = Event()
+uid_only_event.add('dtstart', date(2012, 10, 10))
+uid_only_event['summary'] = 'uid_only_title'
+uid_only_event.add('dtend', datetime(2012, 10, 10, 10, 0, 0))
+uid_only_event['uid'] = 'uid_only'
+
+
 
 save_event_override = None
 
@@ -178,7 +185,10 @@ class CollectionMock(Collection):
             raise NotFoundException(f'event with UID: {uid} not found')
 
     def get_event_impl(self, name: str):
-        event = self.content.get(remove_ics(name))
+        if name == 'uid_only':
+            event = uid_only_event # To test that event are looked up by UID and not via the entire collection
+        else:
+            event = self.content.get(remove_ics(name))
 
         if not event:
             return None
@@ -300,7 +310,7 @@ def test_search_api_without_admin(client):
     assert response.status_code == 404
 
 
-def search_api(client, pattern: str, before: int = None, after: int = None, exact: bool = None) -> list:
+def search_api(client, pattern: str, before: int = None, after: int = None, exact: bool = None, hint: str = None) -> list:
     body = {'pattern': pattern}
 
     if before is not None:
@@ -311,6 +321,9 @@ def search_api(client, pattern: str, before: int = None, after: int = None, exac
 
     if exact is not None:
         body['exact'] = exact
+
+    if hint is not None:
+        body['hint'] = hint
 
     response = client.post(f'api/1/search', data=json.dumps(body), headers={'X-Admin': 'true', 'Content-Type': 'application/json'})
     assert response.status_code == 200
@@ -411,7 +424,28 @@ def test_search_rrule_occurence(client):
     content = search_api(client, "yearly_repeating_event", before=before, after=after)
     assert [e['title'] for e in content] == ['yearly_repeating_event']
 
+def test_search_api_hint_match(client):
+    content = search_api(client, "uid_only", hint='uid_only')
+    assert [e['title'] for e in content] == ['uid_only_title']
 
+def test_search_api_hint_no_match(client):
+    content = search_api(client, "event_12", hint='uid_only')
+    assert [e['title'] for e in content] == ['event_12']
+
+def test_search_api_test_bad_types(client):
+    def expect(body):
+        response = client.post(f'api/1/search', data=json.dumps(body), headers={'X-Admin': 'true', 'Content-Type': 'application/json'})
+        assert response.status_code == 404
+
+    expect({'pattern': None})
+    expect({'pattern': 12})
+    expect({'pattern': '12', 'hint': 12})
+    expect({'pattern': '12', 'hint': 12})
+
+    expect({'pattern': '12', 'after': 'True'})
+    expect({'pattern': '12', 'before': 'foo'})
+    expect({'pattern': '12', 'exact': 'yes'})
+    expect({'pattern': '12', 'exact': None})
 
 def test_view_event_admin(client):
     response = client.get('/1/event_1.ics', headers={'X-Admin': 'true'})
